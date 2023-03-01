@@ -94,12 +94,40 @@ function islabel($token){
         return false;
 }
 
+function XMLaddVarLabel(&$XML, &$instruction, &$instructcnt, $token, $type){
+    $instruction = $XML->addChild('instruction');
+    $instruction->addAttribute('order', $instructcnt);
+    $instruction->addAttribute('opcode', $token[0]);
+    $arg1 = $instruction->addChild('arg1', htmlspecialchars($token[1], ENT_XML1, 'UTF-8'));
+    $arg1->addAttribute('type', $type);
+    $instructcnt++;
+}
+
+function XMLaddSymb(&$XML, &$instruction, $token, $symb, $argn){
+    switch($symb){
+        case 'var':
+            $arg2 = $instruction->addChild('arg'.$argn, htmlspecialchars($token[$argn], ENT_XML1, 'UTF-8'));
+            $arg2->addAttribute('type', $symb);
+            break;
+        case 'int':
+        case 'nil':
+        case 'bool':
+        case 'string':
+            $symbval = explode('@', $token[$argn]);
+            $symbval = $symbval[1];
+            $arg2 = $instruction->addChild('arg'.$argn, htmlspecialchars($symbval, ENT_XML1, 'UTF-8'));
+            $arg2->addAttribute('type', $symb);
+            break;
+    }
+}
+
 function parse($file){
     
     headercheck($file);
 
     $XML = new SimpleXMLElement('<?xml version="1.0" encoding="UTF-8"?><program></program>');
     $XML->addAttribute('language', 'IPPcode23');
+    $instruction;
     $instructcnt = 1;
     
     while ($line = fgets(STDIN)){
@@ -133,12 +161,7 @@ function parse($file){
                 if((sizeof($token) != 2) or (!isvar($token[1])))
                     exit(23);
                 
-                $instruction = $XML->addChild('instruction');
-                $instruction->addAttribute('order', $instructcnt);
-                $instruction->addAttribute('opcode', $token[0]);
-                $arg1 = $instruction->addChild('arg1', htmlspecialchars($token[1]));
-                $arg1->addAttribute('type', 'var');
-                $instructcnt++;
+                XMLaddVarLabel($XML, $instruction, $instructcnt, $token, "var");
                 break;
             
             #### <VAR> <TYPE> ####
@@ -146,14 +169,9 @@ function parse($file){
                 if((sizeof($token) != 3) or (!isvar($token[1])) or (!istype($token[2])))
                    exit(23);
                 
-                $instruction = $XML->addChild('instruction');
-                $instruction->addAttribute('order', $instructcnt);
-                $instruction->addAttribute('opcode', $token[0]);
-                $arg1 = $instruction->addChild('arg1', htmlspecialchars($token[1]));
-                $arg1->addAttribute('type', 'var');
-                $arg2 = $instruction->addChild('arg2', htmlspecialchars($token[2]));
+                XMLaddVarLabel($XML, $instruction, $instructcnt, $token, "var");
+                $arg2 = $instruction->addChild('arg2', htmlspecialchars($token[2], ENT_XML1, 'UTF-8'));
                 $arg2->addAttribute('type', 'type');
-                $instructcnt++;
                 break;
 
             #### <VAR> <SYMB> ####
@@ -165,28 +183,8 @@ function parse($file){
                 if(sizeof($token) != 3 or !(isvar($token[1])) or !($symb = issymb($token[2])))
                     exit(23);
 
-                $instruction = $XML->addChild('instruction');
-                $instruction->addAttribute('order', $instructcnt);
-                $instruction->addAttribute('opcode', $token[0]);
-                $arg1 = $instruction->addChild('arg1', htmlspecialchars($token[1]));
-                $arg1->addAttribute('type', 'var');
-                $instructcnt++;
-
-                switch($symb){
-                    case 'var':
-                        $arg2 = $instruction->addChild('arg2', htmlspecialchars($token[2]));
-                        $arg2->addAttribute('type', $symb);
-                        break;
-                    case 'int':
-                    case 'nil':
-                    case 'bool':
-                    case 'string':
-                        $symbval = explode('@', $token[2]);
-                        $symbval = $symbval[1];
-                        $arg2 = $instruction->addChild('arg2', htmlspecialchars($symbval));
-                        $arg2->addAttribute('type', $symb);
-                        break;
-                }
+                XMLaddVarLabel($XML, $instruction, $instructcnt, $token, "var");
+                XMLaddSymb($XML, $instruction, $token, $symb, 2);
                 break;
             
             #### <VAR> <SYMB1> <SYMB2> ####
@@ -206,43 +204,9 @@ function parse($file){
                 if(sizeof($token) != 4 or !isvar($token[1]) or !($symb1 = issymb($token[2])) or !($symb2 = issymb($token[3])))
                     exit(23);
                 
-                $instruction = $XML->addChild('instruction');
-                $instruction->addAttribute('order', $instructcnt);
-                $instruction->addAttribute('opcode', $token[0]);
-                $arg1 = $instruction->addChild('arg1', htmlspecialchars($token[1]));
-                $arg1->addAttribute('type', 'var');
-                $instructcnt++;
-
-                switch($symb1){
-                    case 'var':
-                        $arg2 = $instruction->addChild('arg2', htmlspecialchars($token[2]));
-                        $arg2->addAttribute('type', $symb1);
-                        break;
-                    case 'int':
-                    case 'nil':
-                    case 'bool':
-                    case 'string':
-                        $symbval = explode('@', $token[2]);
-                        $symbval = $symbval[1];
-                        $arg2 = $instruction->addChild('arg2', htmlspecialchars($symbval));
-                        $arg2->addAttribute('type', $symb1);
-                        break;
-                }
-                switch($symb2){
-                    case 'var':
-                        $arg3 = $instruction->addChild('arg3', htmlspecialchars($token[3]));
-                        $arg3->addAttribute('type', $symb2);
-                        break;
-                    case 'int':
-                    case 'nil':
-                    case 'bool':
-                    case 'string':
-                        $symbval = explode('@', $token[3]);
-                        $symbval = $symbval[1];
-                        $arg3 = $instruction->addChild('arg3', htmlspecialchars($symbval));
-                        $arg3->addAttribute('type', $symb2);
-                        break;
-                }
+                XMLaddVarLabel($XML, $instruction, $instructcnt, $token, "var");
+                XMLaddSymb($XML, $instruction, $token, $symb1, 2);
+                XMLaddSymb($XML, $instruction, $token, $symb2, 3);
                 break;
 
             #### <SYMB> ####
@@ -257,21 +221,7 @@ function parse($file){
                 $instruction->addAttribute('order', $instructcnt);
                 $instruction->addAttribute('opcode', $token[0]);
                 $instructcnt++;
-                switch($symb){
-                    case 'var':
-                        $arg1 = $instruction->addChild('arg1', htmlspecialchars($token[1]));
-                        $arg1->addAttribute('type', $symb);
-                        break;
-                    case 'int':
-                    case 'nil':
-                    case 'bool':
-                    case 'string':
-                        $symbval = explode('@', $token[1]);
-                        $symbval = $symbval[1];
-                        $arg1 = $instruction->addChild('arg1', htmlspecialchars($symbval));
-                        $arg1->addAttribute('type', $symb);
-                        break;
-                }
+                XMLaddSymb($XML, $instruction, $token, $symb, 1);
                 break;
             
             #### <LABEL> ####
@@ -281,12 +231,7 @@ function parse($file){
                 if((sizeof($token) != 2) or (!islabel($token[1])))
                     exit(23);
                 
-                $instruction = $XML->addChild('instruction');
-                $instruction->addAttribute('order', $instructcnt);
-                $instruction->addAttribute('opcode', $token[0]);
-                $arg1 = $instruction->addChild('arg1', htmlspecialchars($token[1]));
-                $arg1->addAttribute('type', 'label');
-                $instructcnt++;
+                XMLaddVarLabel($XML, $instruction, $instructcnt, $token, "label");
                 break;
             
             #### <LABEL> <SYMB1> <SYMB2> ####
@@ -295,43 +240,9 @@ function parse($file){
                 if(sizeof($token) != 4 or !islabel($token[1]) or !($symb1 = issymb($token[2])) or !($symb2 = issymb($token[3])))
                     exit(23);
                 
-                $instruction = $XML->addChild('instruction');
-                $instruction->addAttribute('order', $instructcnt);
-                $instruction->addAttribute('opcode', $token[0]);
-                $arg1 = $instruction->addChild('arg1', htmlspecialchars($token[1]));
-                $arg1->addAttribute('type', 'label');
-                $instructcnt++;
-                
-                switch($symb1){
-                    case 'var':
-                        $arg2 = $instruction->addChild('arg2', htmlspecialchars($token[2]));
-                        $arg2->addAttribute('type', $symb1);
-                        break;
-                    case 'int':
-                    case 'nil':
-                    case 'bool':
-                    case 'string':
-                        $symbval = explode('@', $token[2]);
-                        $symbval = $symbval[1];
-                        $arg2 = $instruction->addChild('arg2', htmlspecialchars($symbval));
-                        $arg2->addAttribute('type', $symb1);
-                        break;
-                }
-                switch($symb2){
-                    case 'var':
-                        $arg3 = $instruction->addChild('arg3', htmlspecialchars($token[3]));
-                        $arg3->addAttribute('type', $symb2);
-                        break;
-                    case 'int':
-                    case 'nil':
-                    case 'bool':
-                    case 'string':
-                        $symbval = explode('@', $token[3]);
-                        $symbval = $symbval[1];
-                        $arg3 = $instruction->addChild('arg3', htmlspecialchars($symbval));
-                        $arg3->addAttribute('type', $symb2);
-                        break;
-                }
+                XMLaddVarLabel($XML, $instruction, $instructcnt, $token, "label");
+                XMLaddSymb($XML, $instruction, $token, $symb1, 2);
+                XMLaddSymb($XML, $instruction, $token, $symb2, 3);
                 break;
             
             default:
