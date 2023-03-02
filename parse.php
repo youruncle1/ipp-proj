@@ -1,4 +1,9 @@
 <?php
+/*
+IPP 22/23 Projekt 1 - skript parse.php
+autor: xpolia05
+*/
+
 ini_set('display_errors', 'stderr');
 
 function parsecmdline(){
@@ -6,13 +11,15 @@ function parsecmdline(){
 
     if (isset($options['help'])) {
         if (count($options) > 1) {
-            echo "Error: --help cannot be combined with other options.\n";
+            fwrite(STDERR, "Error: --help cannot be combined with other options." . PHP_EOL);
             exit(10);
         }
-        echo "Usage: php script.php [OPTIONS]\n";
+        echo "\t####  IPPcode23 code analyzer ####\n";
+        echo "\tScript of filter type reads the source code in IPPcode23 from STDIN,\n\tchecks code for lexcal and syntactic correctness and\n\tprints it in standard XML representation to the STDOUT.\n\n";
+        echo "Usage: php8.1 parse.php [OPTIONS]\n";
         echo "Options:\n";
         echo "  --help          Display this help message and exit.\n";
-        echo "  --stats=file    Specify a file to write statistics to.\n";
+        /*echo "  --stats=file    Specify a file to write statistics to.\n";
         echo "  --loc           Count lines of code.\n";
         echo "  --comments      Count lines with comments.\n";
         echo "  --labels        Count unique labels.\n";
@@ -23,6 +30,7 @@ function parsecmdline(){
         echo "  --frequent      Find most frequently used instructions.\n";
         echo "  --print         Print out a string into statistics file.\n";
         echo "  --eol           Print out an end-of-line into statistics file.\n";
+        */
         exit(0);
     }
 }
@@ -38,12 +46,13 @@ function headercheck($file){
         break;
     }
     
-    if (strtoupper($header) != ".IPPCODE23")
+    if (strtoupper($header) != ".IPPCODE23"){
+        fwrite(STDERR, "Error: incorrect or missing header in trhe source code written in IPPcode23." . PHP_EOL);
         exit(21);
+    }
 
 }
 
-#removes unnecesarry whitespaces, comments from input line
 function contentcut(&$line){
     $line = preg_replace('!\s+!', ' ', $line);
     $line = trim($line);
@@ -70,16 +79,16 @@ function issymb($token){
     if (isvar($token)){
         return "var";
     }
-    elseif (preg_match("/^(int)@[\-\+\][0-9]+$/", $token)){
+    elseif (preg_match("/^int@[-+]?\d+$/", $token)){
         return "int";
     }
-    elseif (preg_match("/^(nil)@(nil)$/", $token)){
+    elseif (preg_match("/^nil@nil$/", $token)){
         return "nil";
     }
-    elseif (preg_match("/^(bool)@(true|false)$/", $token)){
+    elseif (preg_match("/^bool@(true|false)$/", $token)){
         return "bool";
     }
-    elseif (preg_match("/^(string)@([^\\\\]|\\\\\d{3})*$/", $token)){
+    elseif (preg_match("/^string@([^\\\\]|\\\\\d{3})*$/", $token)){
         return "string"; 
     }
     else{
@@ -146,9 +155,10 @@ function parse($file){
             case 'POPFRAME':
             case 'RETURN':
             case 'BREAK':
-                if(sizeof($token) != 1)
+                if(sizeof($token) != 1){
+                    fwrite(STDERR, "Error: lexical or syntax error in the source code written in IPPcode23" . PHP_EOL);
                     exit(23);
-        
+                }
                 $instruction = $XML->addChild('instruction');
                 $instruction->addAttribute('order',$instructcnt);
                 $instruction->addAttribute('opcode',$token[0]);
@@ -158,16 +168,20 @@ function parse($file){
             #### <VAR> ####
             case 'DEFVAR':
             case 'POPS':
-                if((sizeof($token) != 2) or (!isvar($token[1])))
+                if((sizeof($token) != 2) or (!isvar($token[1]))){
+                    fwrite(STDERR, "Error: lexical or syntax error in the source code written in IPPcode23" . PHP_EOL);
                     exit(23);
+                }
                 
                 XMLaddVarLabel($XML, $instruction, $instructcnt, $token, "var");
                 break;
             
             #### <VAR> <TYPE> ####
             case 'READ':
-                if((sizeof($token) != 3) or (!isvar($token[1])) or (!istype($token[2])))
-                   exit(23);
+                if((sizeof($token) != 3) or (!isvar($token[1])) or (!istype($token[2]))){
+                    fwrite(STDERR, "Error: lexical or syntax error in the source code written in IPPcode23" . PHP_EOL);
+                    exit(23);
+                }
                 
                 XMLaddVarLabel($XML, $instruction, $instructcnt, $token, "var");
                 $arg2 = $instruction->addChild('arg2', htmlspecialchars($token[2], ENT_XML1, 'UTF-8'));
@@ -180,8 +194,10 @@ function parse($file){
             case 'STRLEN':
             case 'NOT':
             case 'TYPE':
-                if(sizeof($token) != 3 or !(isvar($token[1])) or !($symb = issymb($token[2])))
+                if(sizeof($token) != 3 or !(isvar($token[1])) or !($symb = issymb($token[2]))){
+                    fwrite(STDERR, "Error: lexical or syntax error in the source code written in IPPcode23" . PHP_EOL);
                     exit(23);
+                }
 
                 XMLaddVarLabel($XML, $instruction, $instructcnt, $token, "var");
                 XMLaddSymb($XML, $instruction, $token, $symb, 2);
@@ -201,8 +217,10 @@ function parse($file){
             case 'CONCAT':
             case 'GETCHAR':
             case 'SETCHAR':
-                if(sizeof($token) != 4 or !isvar($token[1]) or !($symb1 = issymb($token[2])) or !($symb2 = issymb($token[3])))
+                if(sizeof($token) != 4 or !isvar($token[1]) or !($symb1 = issymb($token[2])) or !($symb2 = issymb($token[3]))){
+                    fwrite(STDERR, "Error: lexical or syntax error in the source code written in IPPcode23" . PHP_EOL);
                     exit(23);
+                }
                 
                 XMLaddVarLabel($XML, $instruction, $instructcnt, $token, "var");
                 XMLaddSymb($XML, $instruction, $token, $symb1, 2);
@@ -214,8 +232,10 @@ function parse($file){
             case 'WRITE':
             case 'EXIT':
             case 'DPRINT':
-                if(sizeof($token) != 2 or !($symb = issymb($token[1])))
+                if(sizeof($token) != 2 or !($symb = issymb($token[1]))){
+                    fwrite(STDERR, "Error: lexical or syntax error in the source code written in IPPcode23" . PHP_EOL);
                     exit(23);
+                }
                 
                 $instruction = $XML->addChild('instruction');
                 $instruction->addAttribute('order', $instructcnt);
@@ -228,8 +248,10 @@ function parse($file){
             case 'CALL':
             case 'LABEL':
             case 'JUMP':
-                if((sizeof($token) != 2) or (!islabel($token[1])))
+                if((sizeof($token) != 2) or (!islabel($token[1]))){
+                    fwrite(STDERR, "Error: lexical or syntax error in the source code written in IPPcode23" . PHP_EOL);
                     exit(23);
+                }
                 
                 XMLaddVarLabel($XML, $instruction, $instructcnt, $token, "label");
                 break;
@@ -237,8 +259,10 @@ function parse($file){
             #### <LABEL> <SYMB1> <SYMB2> ####
             case 'JUMPIFEQ':
             case 'JUMPIFNEQ':
-                if(sizeof($token) != 4 or !islabel($token[1]) or !($symb1 = issymb($token[2])) or !($symb2 = issymb($token[3])))
+                if(sizeof($token) != 4 or !islabel($token[1]) or !($symb1 = issymb($token[2])) or !($symb2 = issymb($token[3]))){
+                    fwrite(STDERR, "Error: lexical or syntax error in the source code written in IPPcode23" . PHP_EOL);
                     exit(23);
+                }
                 
                 XMLaddVarLabel($XML, $instruction, $instructcnt, $token, "label");
                 XMLaddSymb($XML, $instruction, $token, $symb1, 2);
@@ -246,6 +270,7 @@ function parse($file){
                 break;
             
             default:
+                fwrite(STDERR, "Error: unknown or incorrect OPCODE in the source code written in IPPcode23" . PHP_EOL);
                 exit(22);
         }#switch
     }#while
