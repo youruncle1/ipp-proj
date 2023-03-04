@@ -79,7 +79,7 @@ function issymb($token){
     if (isvar($token)){
         return "var";
     }
-    elseif (preg_match("/^int@[-+]?\d+$/", $token)){
+    elseif (preg_match("/^int@(?:\+|-)?(?:(?!.*_{2})(?!0\d)\d+(?:_\d+)*|0[oO]?[0-7]+(_[0-7]+)*|0[xX][0-9a-fA-F]+(_[0-9a-fA-F]+)*)$/", $token)){
         return "int";
     }
     elseif (preg_match("/^nil@nil$/", $token)){
