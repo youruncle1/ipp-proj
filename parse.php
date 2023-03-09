@@ -6,7 +6,7 @@ autor: xpolia05
 
 ini_set('display_errors', 'stderr');
 
-function parsecmdline(){
+function parsearguments(){
     $options = getopt(null, ['help', 'stats', 'loc', 'comments', 'labels', 'jumps', 'fwjumps', 'backjumps', 'badjumps', 'frequent', 'print', 'eol']);
 
     if (isset($options['help'])) {
@@ -277,9 +277,8 @@ function parse($file){
     echo $XML->asXML();
 }#func
 
-parsecmdline();
-$file = STDIN;
-parse($file);
+parsearguments();
+parse(STDIN);
 
 
 ?>
