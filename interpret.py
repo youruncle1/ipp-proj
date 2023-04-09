@@ -96,10 +96,10 @@ class XMLValidator:
             return None, 32, f"Invalid order value in Instruction Order {order}"
         order = int(order)
 
-        opcode = xml_instruction.get("opcode").upper()
-        if not opcode or opcode not in self.valid_opcodes:
+        opcode = xml_instruction.get("opcode")
+        if not opcode or opcode.upper() not in self.valid_opcodes:
             return None, 32, f"Invalid opcode name '{opcode}' in Instruction Order {order}"
-        required_args = self.valid_opcodes[opcode]
+        required_args = self.valid_opcodes[opcode.upper()]
         args = []
 
         arg_tags = {}
@@ -122,7 +122,7 @@ class XMLValidator:
 
             # Check if arg_type is in valid_argtypes (valid_argtypes)
             if arg_type not in self.valid_argtypes:
-                return None, 32, f"Invalid argument type '{arg.type}' in Instruction Order {order}"
+                return None, 32, f"Invalid argument type '{arg_type}' in Instruction Order {order}"
 
             arg_value = arg.text
 
