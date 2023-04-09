@@ -3,10 +3,9 @@ import sys
 import re
 import xml.etree.ElementTree as ET
 
-
 def argparser():
     parser = argparse.ArgumentParser(
-        description="TODO TODO TODO TODO TODO.",
+        description="Interpreter for IPPcode23.",
         epilog="At least one of the parameters (--source or --input) must always be specified.",
         add_help=False,
         usage="%(prog)s [--help] [--source=file] [--input=file]"
@@ -94,47 +93,47 @@ class XMLValidator:
     def parse_instruction(self, xml_instruction):
         order = xml_instruction.get("order")
         if order is None or not order.isdigit() or int(order) < 1:
-            return None, 32
+            return None, 32, f"Invalid order value in Instruction Order {order}"
         order = int(order)
 
         opcode = xml_instruction.get("opcode")
         if not opcode or opcode not in self.valid_opcodes:
-            return None, 32
+            return None, 32, f"Invalid opcode name '{opcode}' in Instruction Order {order}"
         required_args = self.valid_opcodes[opcode]
         args = []
 
         arg_tags = {}
         for arg in xml_instruction:
             if not re.match(r'arg[123]$', arg.tag):
-                return None, 32
+                return None, 32, f"Invalid argument tag '{arg.tag}' in Instruction Order {order}"
             arg_index = int(arg.tag[-1])
             if arg_index in arg_tags:
-                return None, 32
+                return None, 32, f"Duplicate argument tag in Instruction Order {order}"
             arg_tags[arg_index] = arg
 
         if len(arg_tags) != required_args:
-            return None, 32
+            return None, 32, f"Incorrect number of arguments in Instruction Order {order}"
 
         for i in range(1, len(arg_tags) + 1):
             arg = arg_tags.get(i)
             if arg is None:
-                return None, 32
+                return None, 32, f"Missing argument in Instruction Order {order}"
             arg_type = arg.get("type")
 
             # Check if arg_type is in valid_argtypes (valid_argtypes)
             if arg_type not in self.valid_argtypes:
-                return None, 32
+                return None, 32, f"Invalid argument type '{arg.type}' in Instruction Order {order}"
 
             arg_value = arg.text
 
             # Check if arg_value matches the corresponding regex pattern for the arg_type
             pattern = self.valid_argtypes.get(arg_type)
             if not re.match(pattern, arg_value):
-                return None, 32
+                return None, 32, f"Invalid argument value in Instruction Order {order}"
 
             args.append(Argument(arg_type, arg_value))
 
-        return Instruction(order, opcode, args), 0
+        return Instruction(order, opcode, args), 0, None
 
     def validate_instructions(self):
         instructions = []
@@ -142,18 +141,18 @@ class XMLValidator:
 
         for xml_instruction in self.root:
             if xml_instruction.tag == "instruction":
-                instruction, error_code = self.parse_instruction(xml_instruction)
+                instruction, error_code, error_message = self.parse_instruction(xml_instruction)
                 if error_code:
-                    return None, error_code, f"Invalid instruction at order {xml_instruction.get('order')}"
+                    return None, error_code, error_message
 
                 if instruction.order in orders:
-                    return None, 32, f"Duplicate instruction order {instruction.order}"
+                    return None, 32, f"Duplicate instruction in Instruction Order {instruction.order}"
 
                 instructions.append(instruction)
                 orders.append(instruction.order)
             else:
                 return None, 32, f"Invalid element '{xml_instruction.tag}' found"
-        
+
         instructions.sort(key=lambda instr: instr.order)
 
         return instructions, 0, None
@@ -169,6 +168,7 @@ class XMLValidator:
 
         return 0, None
 
+
 def main():
     args = argparser()
     
@@ -177,7 +177,7 @@ def main():
             with open(args.source, "r") as file:
                 xml_string = file.read()
         except IOError:
-            print(f"Error: Could not read file {args.source}", file=sys.stderr)
+            print(f"Error: Could not read file '{args.source}'", file=sys.stderr)
             sys.exit(10)
     else:
         xml_string = sys.stdin.read()
@@ -186,7 +186,7 @@ def main():
     error_code, error_message = validator.validate()
 
     if error_code:
-        print(f"XML.Error {error_code}: {error_message}", file=sys.stderr)
+        print(f"XMLError {error_code}: {error_message}", file=sys.stderr)
         sys.exit(error_code)
 
 
