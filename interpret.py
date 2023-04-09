@@ -96,7 +96,7 @@ class XMLValidator:
             return None, 32, f"Invalid order value in Instruction Order {order}"
         order = int(order)
 
-        opcode = xml_instruction.get("opcode")
+        opcode = xml_instruction.get("opcode").upper()
         if not opcode or opcode not in self.valid_opcodes:
             return None, 32, f"Invalid opcode name '{opcode}' in Instruction Order {order}"
         required_args = self.valid_opcodes[opcode]
