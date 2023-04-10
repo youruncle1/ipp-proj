@@ -650,19 +650,18 @@ class IPPInterpreter:
         return 0  # Success
     
     def type_instruction(self, var, symb):
-        if isinstance(symb, int):
-            symb_type = "int"
-        elif isinstance(symb, bool):
-            symb_type = "bool"
-        elif isinstance(symb, str):
-            symb_type = "string"
-        elif symb is None:
-            symb_type = "nil"
-        else:
-            symb_type = ""
+    #REDO COMPLETELY, get_operand_values nestaci...!!!!
+        error_code = self.is_variable_defined(var.value)
+        if error_code:
+            return error_code
+ 
+        
+        error_code, (symb_value, symb_value) = self.get_operand_values(symb, symb)
+        if error_code != 0:
+            return error_code
 
-        frame, variable_name = var.split('@', 1)
-        self.frames[frame][variable_name] = symb_type
+        frame, variable_name = var.value.split('@', 1)
+        self.frames[frame][variable_name] = type(symb_value).__name__
         return 0  # Success
     
     def label_instruction(self, label):
