@@ -284,6 +284,9 @@ class IPPInterpreter:
                     #print(f"in get_operand symb_actual_type {symb_actual_type}, value type {type(symb_actual_type)}")
                     if symb_actual_type == 'bool':
                         symb_value = self.frames[frame_name][var_name][0] == 'true'
+                    
+                    if symb_actual_type == 'int':
+                        symb_value = self.parse_int(str(self.frames[frame_name][var_name][0]))
                     #if isinstance(self.frames[frame_name][var_name], str) and (self.frames[frame_name][var_name] != 'true' and self.frames[frame_name][var_name] != 'false'):
                     #    symb_value = self.parse_int(self.frames[frame_name][var_name])
                     #elif isinstance(self.frames[frame_name][var_name], str) and (self.frames[frame_name][var_name] != 'true' or self.frames[frame_name][var_name] != 'false'):
@@ -297,7 +300,6 @@ class IPPInterpreter:
             elif symb_type == 'int':
                 symb_value = self.parse_int(symb_value)
                 symb_actual_type = 'int'
-
                 if symb_value is None:
                     return 53, (None, None), (None, None)  # Error: Invalid operand types
 
@@ -464,8 +466,10 @@ class IPPInterpreter:
             return error_code
         if symb1_type != 'int' or symb2_type != 'int':
             return 53
-        result = (symb1_value + symb2_value, int)
         
+        #print(f"symb1 {symb1_value}, symb1_type: {symb1_type}, {type(symb1_value)}")
+        #print(f"symb2 {symb2_value}, symb1_type: {symb2_type}, {type(symb2_value)}")
+        result = (symb1_value + symb2_value, 'int')
         return self.store_result(var, result)
 
     def sub(self, var, symb1, symb2):
@@ -482,7 +486,7 @@ class IPPInterpreter:
         if symb1_type != 'int' or symb2_type != 'int':
             return 53
 
-        result = (symb1_value - symb2_value, int)
+        result = (symb1_value - symb2_value, 'int')
         return self.store_result(var, result)
 
     def mul(self, var, symb1, symb2):
@@ -499,7 +503,7 @@ class IPPInterpreter:
         if symb1_type != 'int' or symb2_type != 'int':
             return 53
         
-        result = (symb1_value * symb2_value, int)
+        result = (symb1_value * symb2_value, 'int')
         return self.store_result(var, result)
 
     def idiv(self, var, symb1, symb2):
@@ -518,39 +522,43 @@ class IPPInterpreter:
         
         if symb2_value == 0:
             return 57
-        result = (symb1_value // symb2_value, int)
+        result = (symb1_value // symb2_value, 'int')
         return self.store_result(var, result)
     
     def lt_gt_eq(self, var, symb1, symb2):
-        #print(f"lt_gt_eq var.value {var.value}, type {type(var.value)}")
         error_code = self.is_variable_defined(var.value)
         if error_code:
             return error_code
-        
-        if symb1.arg_type == 'nil' or symb2.arg_type == 'nil':
-            return 53  # Error: Invalid operand types
-        
-        error_code, (symb1_value, symb2_value) = self.get_operand_values(symb1, symb2)
+
+        if symb1.arg_type not in ('int', 'bool', 'string', 'nil', 'var') or symb2.arg_type not in ('int', 'bool', 'string', 'nil', 'var'):
+            return 53
+
+        error_code, (symb1_value, symb2_value), (symb1_type, symb2_type) = self.get_operand_values(symb1, symb2)
         if error_code != 0:
             return error_code
-        
-        # Ensure both operands are of the same type
-        if type(symb1_value) != type(symb2_value):
-            return 53  # Error: Invalid operand types
-        
-        # Get the opcode of the current instruction
+
+        if symb1_type != symb2_type and (symb1_type != 'nil' and symb2_type != 'nil'):
+            return 53
+
         opcode = self.instructions[self.current_position].opcode.upper()
-        
-        if opcode == 'LT':
-            result = symb1_value < symb2_value
-        elif opcode == 'GT':
-            result = symb1_value > symb2_value
-        elif opcode == 'EQ':
-            result = symb1_value == symb2_value
+
+        if opcode == 'EQ':
+            if symb1_type == 'nil' or symb2_type == 'nil':
+                result = symb1_type == symb2_type
+            else:
+                result = symb1_value == symb2_value
+        elif opcode in ('LT', 'GT'):
+            if symb1_type == 'nil' or symb2_type == 'nil':
+                return 53
+
+            if opcode == 'LT':
+                result = symb1_value < symb2_value
+            else:
+                result = symb1_value > symb2_value
         else:
             return 32  # Error: Unknown opcode
-        
-        return self.store_result(var, result)
+
+        return self.store_result(var, (result, 'bool'))
 
     def and_or_not(self, var, symb1, symb2=None):
         error_code = self.is_variable_defined(var.value)
@@ -588,35 +596,50 @@ class IPPInterpreter:
         else:
             return 32  # Error: Unknown opcode
         
-        result = (result, int)
+        result = (result, 'int')
         return self.store_result(var, result)
 
     def int2char(self, var, symb):
-        if type(symb) != int:
-            return 53  # Error: Invalid operand type
+        error_code = self.is_variable_defined(var.value)
+        if error_code:
+            return error_code
+
+        if symb.arg_type not in ('int', 'bool', 'string', 'nil', 'var'):
+            return 53
+        
+        error_code, (symb_value, symb_none), (symb_type, symb_none) = self.get_operand_values(symb, None)  
+        if error_code != 0:
+            return error_code
+        
+        if symb_type != 'int':
+            return 53
 
         try:
-            char_value = chr(symb)
+            char = chr(symb_value)
         except ValueError:
-            return 58  # Error: Invalid Unicode value
+            return 58  # Error: Invalid Unicode ordinal value
 
-        frame, variable_name = var.split('@', 1)
-        self.frames[frame][variable_name] = char_value
-
-        return 0  # Success
+        return self.store_result(var, (char, 'string'))
 
     def stri2int(self, var, symb1, symb2):
-        if type(symb1) != str or type(symb2) != int:
-            return 53  # Error: Invalid operand types
+        error_code = self.is_variable_defined(var.value)
+        if error_code:
+            return error_code
 
-        if symb2 < 0 or symb2 >= len(symb1):
-            return 58  # Error: Invalid string index
+        if symb1.arg_type not in ('int', 'bool', 'string', 'nil', 'var') or symb2.arg_type not in ('int', 'bool', 'string', 'nil', 'var'):
+            return 53
 
-        unicode_value = ord(symb1[symb2])
-        frame, variable_name = var.split('@', 1)
-        self.frames[frame][variable_name] = unicode_value
+        error_code, (symb1_value, symb2_value), (symb1_type, symb2_type) = self.get_operand_values(symb1, symb2)
+        if error_code != 0:
+            return error_code
+        if symb1_type != 'string' or symb2_type != 'int':
+            return 53
 
-        return 0  # Success
+        if symb2_value < 0 or symb2_value >= len(symb1_value):
+            return 58  # Error: Indexing outside the given string
+
+        char = symb1_value[symb2_value]
+        return self.store_result(var, (ord(char), 'int'))
 
     def read(self, var, data_type):
         input_value = input()
