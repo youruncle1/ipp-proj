@@ -8,7 +8,7 @@ def argparser():
         description="Interpreter for IPPcode23.",
         epilog="At least one of the parameters (--source or --input) must always be specified.",
         add_help=False,
-        usage="%(prog)s [--help] [--source=file] [--input=file]"
+        usage="interpret.py [--help] [--source=file] [--input=file]"
     )
 
     parser.add_argument(
@@ -127,7 +127,6 @@ class XMLValidator:
 
             arg_value = arg.text if arg.text is not None else ""
 
-            # Check if arg_value matches the corresponding regex pattern for the arg_type
             pattern = self.valid_argtypes.get(arg_type)
             if not re.match(pattern, arg_value):
                 return None, 32, f"Invalid argument value '{arg_value}' in Instruction Order {order}"
@@ -147,11 +146,11 @@ class XMLValidator:
                 if error_code:
                     return None, None, error_code, error_message
 
-                if instruction.opcode.upper() == "LABEL":  # Check if the instruction is a label
+                if instruction.opcode.upper() == "LABEL":
                     label_name = instruction.args[0].value
                     if label_name in labels:
                         return None, None, 52, f"Duplicate label '{label_name}' in Instruction Order {instruction.order}"
-                    labels[label_name] = instruction.order  # Add the label to the labels dictionary
+                    labels[label_name] = instruction.order 
 
                 if instruction.order in orders:
                     return None, None, 32, f"Duplicate instruction order in Instruction Order {instruction.order}"
@@ -164,14 +163,14 @@ class XMLValidator:
 
         instructions.sort(key=lambda instr: instr.order)
 
-        return instructions, labels, 0, None  # Return the labels dictionary along with other values
+        return instructions, labels, 0, None 
 
     def validate(self):
         error_code, error_message = self.check_header()
         if error_code:
             return error_code, error_message
 
-        instructions, labels, error_code, error_message = self.validate_instructions()  # Unpack 4 values here
+        instructions, labels, error_code, error_message = self.validate_instructions() 
         if error_code:
             return error_code, error_message
 
@@ -256,7 +255,7 @@ class IPPInterpreter:
         symb_values = []
         symb_types = []
         for symb in [symb1, symb2]:
-            if symb is None: #NOT instruction behaviour
+            if symb is None: #single symb instruction behaviour
                 break
             symb_value = symb.value
             symb_type = symb.arg_type
@@ -267,13 +266,13 @@ class IPPInterpreter:
                     frame_name = frame_name.upper()
                     #print(f"frame_name {frame_name}, var_name {var_name}")
                     if self.frames[frame_name] is None:
-                        return 55, (None, None), (None, None)  # Error: Access to a non-existent frame
+                        return 55, (None, None), (None, None)  # Access to a non-existent frame
                     
                     if var_name not in self.frames[frame_name]:
-                        return 54, (None, None), (None, None)  # Error: variable undefined
+                        return 54, (None, None), (None, None)  # variable undefined
                     
                     if self.frames[frame_name][var_name] is None:
-                        return 56, (None, None), (None, None) 
+                        return 56, (None, None), (None, None)  # variable uninitialized
                     
                     symb_value = self.frames[frame_name][var_name][0]
                     if symb_value is None:
@@ -295,13 +294,13 @@ class IPPInterpreter:
                     
                     #print(f"in get_operand symb_value AFTER {symb_value}")
                 else:
-                    return 53, (None, None), (None, None)  # Error: Invalid operand types
+                    return 53, (None, None), (None, None)  # wrong type
 
             elif symb_type == 'int':
                 symb_value = self.parse_int(symb_value)
                 symb_actual_type = 'int'
                 if symb_value is None:
-                    return 53, (None, None), (None, None)  # Error: Invalid operand types
+                    return 53, (None, None), (None, None)  # wrong type
 
             elif symb_type == 'bool':
                 symb_value = symb_value.lower() == 'true'
@@ -312,7 +311,7 @@ class IPPInterpreter:
                 symb_actual_type = 'string'
 
             else:
-                return 53, (None, None), (None, None)  # Error: Invalid operand types
+                return 53, (None, None), (None, None)  # wrong type
             
             symb_values.append(symb_value)
             symb_types.append(symb_actual_type)
@@ -329,10 +328,10 @@ class IPPInterpreter:
         frame_name = frame_name.upper()
 
         if frame_name not in self.frames:
-            return 54  # Error: Access to a non-existent variable (frame exists)
+            return 54  # Access to a non-existent variable (frame exists)
         self.frames[frame_name][variable_name] = (result[0], result[1])
         #print(f"self.frames[{frame_name}][{variable_name}] = ({result[0], result[1]})")
-        return 0  # Success
+        return 0 
 
 
     def parse_int(self, value):
@@ -364,10 +363,10 @@ class IPPInterpreter:
                 src_frame_name = src_frame_name.upper()
 
                 if src_frame_name not in self.frames:
-                    return 54  # Error: Access to a non-existent variable (frame exists)
+                    return 54  # Access to a non-existent variable (frame exists)
 
                 if src_var_name not in self.frames[src_frame_name]:
-                    return 56  # Error: Missing value (in a variable)
+                    return 56  # Uninitialized variable (missin val in a variable)
 
                 value = self.frames[src_frame_name][src_var_name]
         else:
@@ -376,26 +375,26 @@ class IPPInterpreter:
         if var_name in self.frames[frame_name]:
             self.frames[frame_name][var_name] = (value, symb.arg_type)
         else:
-            return 54  # Error: Access to a non-existent variable (frame exists)
+            return 54  # Access to a non-existent variable (frame exists)
 
-        return 0  # Success
+        return 0  
 
     def create_frame(self):
         self.frames['TF'] = {}
-        return 0  # Success
-
+        return 0  
+    
     def push_frame(self):
         if self.frames['TF'] is None:
-            return 55  # Error: Accessing undefined frame
+            return 55  # Accessing undefined frame
 
         self.frame_stack.append(self.frames['TF'])
         self.frames['LF'] = self.frames['TF']
         self.frames['TF'] = None
-        return 0  # Success
+        return 0  
     
     def pop_frame(self):
         if self.frames['LF'] is None:
-            return 55  # Error: Accessing undefined frame
+            return 55  # Accessing undefined frame
 
         self.frames['TF'] = self.frames['LF']
         self.frame_stack.pop()
@@ -404,53 +403,51 @@ class IPPInterpreter:
         else:
             self.frames['LF'] = None
 
-        return 0  # Success
+        return 0 
 
     def def_var(self, arg):
         #print(f"Inside def_var method with arg: {arg}")
-        variable = arg.value  # Extract the variable value from the Argument object
+        variable = arg.value
 
         frame, var_name = variable.split('@')
         if frame not in self.frames or self.frames[frame] is None:
-            return 55  # Error: Accessing undefined frame
+            return 55  # Accessing undefined frame
 
         if var_name in self.frames[frame]:
-            return 52  # Error: Redefining existing variable
+            return 52  # Redefining existing variable
 
         self.frames[frame][var_name] = None
-        return 0  # Success
+        return 0 
     
     def call(self, label):
-        # Assuming labels are stored in a dictionary called `labels`
-        # with keys as label names and values as instruction indices
         if label not in self.labels:
-            return 52  # Error: Undefined label
+            return 52  # Undefined label
 
         self.call_stack.append(self.current_instruction_index + 1)
         self.current_instruction_index = self.labels[label]
 
-        return 0  # Success
+        return 0  
 
     def return_instruction(self):
         if len(self.call_stack) == 0:
-            return 56  # Error: Empty call stack
+            return 56  # Empty call stack
 
         self.current_instruction_index = self.call_stack.pop()
-        return 0  # Success
+        return 0 
     
     def pushs(self, symb):
         self.data_stack.append(symb)
-        return 0  # Success
+        return 0 
 
     def pops(self, var):
         if len(self.data_stack) == 0:
-            return 56  # Error: Empty data stack
+            return 56  # Empty data stack
 
         value = self.data_stack.pop()
         frame, variable_name = var.split('@', 1)
         self.frames[frame][variable_name] = value
 
-        return 0  # Success
+        return 0
 
     def add(self, var, symb1, symb2):
         error_code = self.is_variable_defined(var.value)
@@ -459,13 +456,13 @@ class IPPInterpreter:
         
         #is this needed anymore???
         if (symb1.arg_type != 'int' and symb1.arg_type !='var') or (symb2.arg_type != 'int' and symb2.arg_type !='var'):
-            return 53
+            return 53 # wrong type
         
         error_code, (symb1_value, symb2_value), (symb1_type, symb2_type) = self.get_operand_values(symb1, symb2)
         if error_code != 0:
             return error_code
         if symb1_type != 'int' or symb2_type != 'int':
-            return 53
+            return 53 # wrong type
         
         #print(f"symb1 {symb1_value}, symb1_type: {symb1_type}, {type(symb1_value)}")
         #print(f"symb2 {symb2_value}, symb1_type: {symb2_type}, {type(symb2_value)}")
@@ -478,13 +475,13 @@ class IPPInterpreter:
             return error_code
         
         if (symb1.arg_type != 'int' and symb1.arg_type !='var') or (symb2.arg_type != 'int' and symb2.arg_type !='var'):
-            return 53
+            return 53 # wrong type
         
         error_code, (symb1_value, symb2_value), (symb1_type, symb2_type) = self.get_operand_values(symb1, symb2)
         if error_code != 0:
             return error_code
         if symb1_type != 'int' or symb2_type != 'int':
-            return 53
+            return 53 # wrong type
 
         result = (symb1_value - symb2_value, 'int')
         return self.store_result(var, result)
@@ -495,13 +492,13 @@ class IPPInterpreter:
             return error_code
         
         if (symb1.arg_type != 'int' and symb1.arg_type !='var') or (symb2.arg_type != 'int' and symb2.arg_type !='var'):
-            return 53
+            return 53 # wrong type
         
         error_code, (symb1_value, symb2_value), (symb1_type, symb2_type) = self.get_operand_values(symb1, symb2)
         if error_code != 0:
             return error_code
         if symb1_type != 'int' or symb2_type != 'int':
-            return 53
+            return 53 # wrong type
         
         result = (symb1_value * symb2_value, 'int')
         return self.store_result(var, result)
@@ -512,16 +509,16 @@ class IPPInterpreter:
             return error_code
         
         if (symb1.arg_type != 'int' and symb1.arg_type !='var') or (symb2.arg_type != 'int' and symb2.arg_type !='var'):
-            return 53
+            return 53 # wrong type
         
         error_code, (symb1_value, symb2_value), (symb1_type, symb2_type) = self.get_operand_values(symb1, symb2)
         if error_code != 0:
             return error_code
         if symb1_type != 'int' or symb2_type != 'int':
-            return 53
+            return 53 # wrong type
         
         if symb2_value == 0:
-            return 57
+            return 57 # bad operand type: division by zero
         result = (symb1_value // symb2_value, 'int')
         return self.store_result(var, result)
     
@@ -531,14 +528,14 @@ class IPPInterpreter:
             return error_code
 
         if symb1.arg_type not in ('int', 'bool', 'string', 'nil', 'var') or symb2.arg_type not in ('int', 'bool', 'string', 'nil', 'var'):
-            return 53
+            return 53 # wrong type
 
         error_code, (symb1_value, symb2_value), (symb1_type, symb2_type) = self.get_operand_values(symb1, symb2)
         if error_code != 0:
             return error_code
 
         if symb1_type != symb2_type and (symb1_type != 'nil' and symb2_type != 'nil'):
-            return 53
+            return 53 # wrong type
 
         opcode = self.instructions[self.current_position].opcode.upper()
 
@@ -549,14 +546,14 @@ class IPPInterpreter:
                 result = symb1_value == symb2_value
         elif opcode in ('LT', 'GT'):
             if symb1_type == 'nil' or symb2_type == 'nil':
-                return 53
+                return 53 # wrong type
 
             if opcode == 'LT':
                 result = symb1_value < symb2_value
             else:
                 result = symb1_value > symb2_value
         else:
-            return 32  # Error: Unknown opcode
+            return 32  # Invalid opcode
 
         return self.store_result(var, (result, 'bool'))
 
@@ -566,7 +563,7 @@ class IPPInterpreter:
             return error_code
 
         if (symb1.arg_type != 'bool' and symb1.arg_type != 'var') or (symb2 is not None and symb2.arg_type != 'bool' and symb2.arg_type != 'var'):
-            return 53
+            return 53 # wrong type
         
         error_code, (symb1_value, symb2_value), (symb1_type, symb2_type) = self.get_operand_values(symb1, symb2)
         if error_code != 0:
@@ -577,24 +574,24 @@ class IPPInterpreter:
         
         if opcode == 'AND':
             if symb2_value is None:
-                return 53  # Error: Invalid operand types
+                return 53 
             if symb1_type != 'bool' or symb1_type != 'bool':
                 return 53
             result = symb1_value and symb2_value
         elif opcode == 'OR':
             if symb2_value is None:
-                return 53  # Error: Invalid operand types
+                return 53 
             if symb1_type != 'bool' or symb1_type != 'bool':
                 return 53
             result = symb1_value or symb2_value
         elif opcode == 'NOT':
             if symb1_type != 'bool':
-                return 53
+                return 53 
             #print(f"debug: not {symb1_value}: {not symb1_value}")
             result = not symb1_value
             #print(f"result of not symb1_value {result}")
         else:
-            return 32  # Error: Unknown opcode
+            return 32  # Invalid opcode
         
         result = (result, 'int')
         return self.store_result(var, result)
@@ -605,19 +602,19 @@ class IPPInterpreter:
             return error_code
 
         if symb.arg_type not in ('int', 'bool', 'string', 'nil', 'var'):
-            return 53
+            return 53 # wrong type
         
         error_code, (symb_value, symb_none), (symb_type, symb_none) = self.get_operand_values(symb, None)  
         if error_code != 0:
             return error_code
         
         if symb_type != 'int':
-            return 53
+            return 53 # wrong type
 
         try:
             char = chr(symb_value)
         except ValueError:
-            return 58  # Error: Invalid Unicode ordinal value
+            return 58  # Invalid Unicode val
 
         return self.store_result(var, (char, 'string'))
 
@@ -627,16 +624,16 @@ class IPPInterpreter:
             return error_code
 
         if symb1.arg_type not in ('int', 'bool', 'string', 'nil', 'var') or symb2.arg_type not in ('int', 'bool', 'string', 'nil', 'var'):
-            return 53
+            return 53 # wrong type
 
         error_code, (symb1_value, symb2_value), (symb1_type, symb2_type) = self.get_operand_values(symb1, symb2)
         if error_code != 0:
             return error_code
         if symb1_type != 'string' or symb2_type != 'int':
-            return 53
+            return 53 # wrong type
 
         if symb2_value < 0 or symb2_value >= len(symb1_value):
-            return 58  # Error: Indexing outside the given string
+            return 58  # invalid string operation: indexing outside the given string
 
         char = symb1_value[symb2_value]
         return self.store_result(var, (ord(char), 'int'))
@@ -669,71 +666,142 @@ class IPPInterpreter:
             frame_name = frame_name.upper()
 
             if frame_name not in self.frames:
-                return 54  # Error: Access to a non-existent variable (frame exists)
+                return 54  # Access to a non-existent variable (frame exists)
 
             if var_name not in self.frames[frame_name]:
-                return 56  # Error: Missing value (in a variable)
+                return 56  # non initialized (missin val in variable)
 
             value = self.frames[frame_name][var_name][0]
-        #print(f"value {value}")
+        
+        opcode = self.instructions[self.current_position-1].opcode.upper()
+        
+        #print(f"value {value}, opcode {opcode}, {self.instructions[self.current_position-1].opcode.upper() == 'TYPE'} ")
         if type(value) == bool:
             output_value = 'true' if value else 'false'
-        elif value is None or value == 'nil':
+        elif value is None or (value == 'nil' and self.instructions[self.current_position-1].opcode.upper() != 'TYPE'):
             output_value = ''
         else:
             output_value = str(value)
 
         print(output_value, end='')
-        return 0  # Success
+        return 0 
 
     def concat(self, var, symb1, symb2):
-        result = symb1 + symb2
-        frame, variable_name = var.split('@', 1)
-        self.frames[frame][variable_name] = result
-        return 0  # Success
+        error_code = self.is_variable_defined(var.value)
+        if error_code:
+            return error_code
+
+        if symb1.arg_type not in ('int', 'bool', 'string', 'nil', 'var') or symb2.arg_type not in ('int', 'bool', 'string', 'nil', 'var'):
+            return 53 # wrong type
+
+        error_code, (symb1_value, symb2_value), (symb1_type, symb2_type) = self.get_operand_values(symb1, symb2)
+        if error_code != 0:
+            return error_code
+        if symb1_type != 'string' or symb2_type != 'string':
+            return 53 # wrong type
+
+        result = symb1_value + symb2_value
+        return self.store_result(var, (result, 'string'))
 
     def strlen(self, var, symb):
-        length = len(symb)
-        frame, variable_name = var.split('@', 1)
-        self.frames[frame][variable_name] = length
-        return 0  # Success
+        error_code = self.is_variable_defined(var.value)
+        if error_code:
+            return error_code
+
+        if symb.arg_type not in ('int', 'bool', 'string', 'nil', 'var'):
+            return 53 # wrong type
+
+        error_code, (symb_value, symb_none), (symb_type, symb_none) = self.get_operand_values(symb, None) 
+        if error_code != 0:
+            return error_code
+        if symb_type != 'string':
+            return 53 # wrong type
+
+        string_length = len(symb_value)
+        return self.store_result(var, (string_length, 'int'))
 
     def getchar(self, var, symb1, symb2):
-        try:
-            character = symb1[symb2]
-        except IndexError:
-            return 58  # Error: Indexing outside the given string
+        error_code = self.is_variable_defined(var.value)
+        if error_code:
+            return error_code
 
-        frame, variable_name = var.split('@', 1)
-        self.frames[frame][variable_name] = character
-        return 0  # Success
+        if symb1.arg_type not in ('int', 'bool', 'string', 'nil', 'var') or symb2.arg_type not in ('int', 'bool', 'string', 'nil', 'var'):
+            return 53 # wrong type
+
+        error_code, (symb1_value, symb2_value), (symb1_type, symb2_type) = self.get_operand_values(symb1, symb2)
+        if error_code != 0:
+            return error_code
+        if symb1_type != 'string' or symb2_type != 'int':
+            return 53 # wrong type
+
+        if symb2_value < 0 or symb2_value >= len(symb1_value):
+            return 58 # invalid string operation
+
+        character = symb1_value[symb2_value]
+        return self.store_result(var, (character, 'string'))
 
     def setchar(self, var, symb1, symb2):
-        frame, variable_name = var.split('@', 1)
-        string = self.frames[frame][variable_name]
+        pass
+    '''
+        def setchar(self, var, symb1, symb2):
+        error_code = self.is_variable_defined(var.value)
+        if error_code:
+            return error_code
 
-        try:
-            new_character = symb2[0]
-        except IndexError:
-            return 58  # Error: Empty string in symb2
+        if symb1.arg_type not in ('int', 'bool', 'string', 'nil', 'var'):
+            return 53
+        if symb2.arg_type not in ('int', 'bool', 'string', 'nil', 'var'):
+            return 53
 
-        try:
-            new_string = string[:symb1] + new_character + string[symb1 + 1:]
-        except IndexError:
-            return 58  # Error: Indexing outside the given string
+        error_code, var_value, var_type = self.get_operand_value(var)
+        if error_code != 0:
+            return error_code
+        if var_type != 'string':
+            return 53
 
-        self.frames[frame][variable_name] = new_string
-        return 0  # Success
-    
+        error_code, symb1_value, symb1_type = self.get_operand_value(symb1)
+        if error_code != 0:
+            return error_code
+        if symb1_type != 'int':
+            return 53
+
+        error_code, symb2_value, symb2_type = self.get_operand_value(symb2)
+        if error_code != 0:
+            return error_code
+        if symb2_type != 'string' or len(symb2_value) == 0:
+            return 53
+
+        if symb1_value < 0 or symb1_value >= len(var_value):
+            return 58
+
+        modified_string = var_value[:symb1_value] + symb2_value[0] + var_value[symb1_value + 1:]
+        return self.store_result(var, (modified_string, 'string'))
+    '''
     def type_instruction(self, var, symb):
-    #REDO COMPLETELY, get_operand_values nestaci!!!!
-        return 0  # Success
+        error_code = self.is_variable_defined(var.value)
+        if error_code:
+            return error_code
+
+        if symb.arg_type not in ('int', 'bool', 'string', 'nil', 'var'):
+            return 53 # wrong type
+
+        symb_value, symb_type = None, None
+        if symb.arg_type == 'var':
+            error_code, (symb_value, symb_none), (symb_type, symb_none) = self.get_operand_values(symb, None)
+            if error_code == 56:  # Uninitialized variable
+                symb_type = ''
+            elif error_code != 0:
+                return error_code
+        else:
+            symb_type = symb.arg_type
+
+        return self.store_result(var, (symb_type, 'string'))
     
     def label_instruction(self, label):
         if label in self.labels:
-            return 52  # Error: duplicate label
+            return 52  #duplicate label
         self.labels[label] = self.current_instruction_index
-        return 0  # Success
+        return 0 
 
     def jump_instruction(self, label):
         if label not in self.labels:
@@ -753,16 +821,21 @@ class IPPInterpreter:
             return 53  # Error: different types
         if symb1 != symb2:
             return self.jump_instruction(label)
-        return 0  # Success
+        return 0  
 
     def exit_instruction(self, symb):
-        if not isinstance(symb, int) or symb < 0 or symb > 49:
-            return 57  # Error: invalid exit code
-        return symb  # Exit with the given return code
+        error_code, (symb_value, symb_none), (symb_type, symb_none) = self.get_operand_values(symb, None)
+        if error_code != 0:
+            return error_code
+        if symb_type != 'int':
+            return 53 #wrong type
+        if 0 <= symb_value <= 49:
+            sys.exit(symb_value)
+        return 57 #wrong exit code
     
     def dprint_instruction(self, symb):
         print(symb, file=sys.stderr)
-        return 0  # Success
+        return 0 
 
     def break_instruction(self):
         print(f"Position in code: {self.current_position}", file=sys.stderr)
@@ -770,14 +843,14 @@ class IPPInterpreter:
         print(f"Local frame: {self.frames['LF']}", file=sys.stderr)
         print(f"Temporary frame: {self.frames['TF']}", file=sys.stderr)
         print(f"Number of executed instructions: {self.executed_instructions_count}", file=sys.stderr)
-        return 0  # Success
+        return 0 
     
     def execute_instructions(self):
 
         while self.current_position < len(self.instructions):
             instruction = self.instructions[self.current_position]
 
-            # Get the instruction name and arguments
+            # Get instruction and its arguments
             instr_name = instruction.opcode.upper()
             instr_name = instr_name.strip()
             args = instruction.args
@@ -786,10 +859,10 @@ class IPPInterpreter:
             #print(f"Instruction args: {[str(arg.value) for arg in args]}")
 
             try:
-                # Map the instruction name to the corresponding method
+                # instruction mapping
                 if instr_name in self.instruction_mapping:
                     method = self.instruction_mapping[instr_name]
-                    # Unpack the args variable when calling the method
+                    # Unpack the args to method
                     result = method(*args)
                 else:
                     raise KeyError(f"Invalid instruction name: {instr_name}")
@@ -825,14 +898,14 @@ def main():
         print(f"Error {error_code}: {error_message}", file=sys.stderr)
         exit(error_code)
 
-    instructions, labels, error_code, error_message = validator.validate_instructions()  # Unpack 4 values here
+    instructions, labels, error_code, error_message = validator.validate_instructions()  
     if error_code:
         print(f"Error {error_code}: {error_message}", file=sys.stderr)
         exit(error_code)
 
-    interpreter = IPPInterpreter(instructions, labels)  # Pass the labels dictionary
+    interpreter = IPPInterpreter(instructions, labels) 
     error_code = interpreter.execute_instructions()
-    sys.exit(error_code)  # Exit the program with the error code
+    sys.exit(error_code) 
 
 if __name__ == "__main__":
     main()
