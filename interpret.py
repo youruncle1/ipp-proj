@@ -254,6 +254,7 @@ class IPPInterpreter:
 
     def get_operand_values(self, symb1, symb2=None):
         symb_values = []
+        symb_types = []
         for symb in [symb1, symb2]:
             if symb is None: #NOT instruction behaviour
                 break
@@ -266,48 +267,60 @@ class IPPInterpreter:
                     frame_name = frame_name.upper()
                     #print(f"frame_name {frame_name}, var_name {var_name}")
                     if self.frames[frame_name] is None:
-                        return 55, (None, None)  # Error: Access to a non-existent frame
+                        return 55, (None, None), (None, None)  # Error: Access to a non-existent frame
                     
                     if var_name not in self.frames[frame_name]:
-                        return 54, (None, None)  # Error: variable undefined
+                        return 54, (None, None), (None, None)  # Error: variable undefined
                     
-                    symb_value = self.frames[frame_name][var_name]
+                    if self.frames[frame_name][var_name] is None:
+                        return 56, (None, None), (None, None) 
+                    
+                    symb_value = self.frames[frame_name][var_name][0]
                     if symb_value is None:
-                        return 56, (None, None)  # Error: Missing value (in a variable)
-                    #print(f"in get_operand symb_value {symb_value}")
-                    #print(f"in get_operand frame {self.frames[frame_name][var_name]}, value type {type(self.frames[frame_name][var_name])}")
-                    if isinstance(self.frames[frame_name][var_name], str) and (self.frames[frame_name][var_name] != 'true' and self.frames[frame_name][var_name] != 'false'):
-                        symb_value = self.parse_int(self.frames[frame_name][var_name])
-                    elif isinstance(self.frames[frame_name][var_name], str) and (self.frames[frame_name][var_name] != 'true' or self.frames[frame_name][var_name] != 'false'):
-                        symb_value = self.frames[frame_name][var_name].lower() == 'true'
-                    else:
-                        symb_value = self.frames[frame_name][var_name]
+                        return 56, (None, None), (None, None)  # Error: Missing value (in a variable)
+                    symb_actual_type = self.frames[frame_name][var_name][1]
+                    
+                    #print(f"in get_operand symb_value {symb_value}, value type {type(symb_value)}")
+                    #print(f"in get_operand symb_actual_type {symb_actual_type}, value type {type(symb_actual_type)}")
+                    if symb_actual_type == 'bool':
+                        symb_value = self.frames[frame_name][var_name][0] == 'true'
+                    #if isinstance(self.frames[frame_name][var_name], str) and (self.frames[frame_name][var_name] != 'true' and self.frames[frame_name][var_name] != 'false'):
+                    #    symb_value = self.parse_int(self.frames[frame_name][var_name])
+                    #elif isinstance(self.frames[frame_name][var_name], str) and (self.frames[frame_name][var_name] != 'true' or self.frames[frame_name][var_name] != 'false'):
+                    #    symb_value = self.frames[frame_name][var_name].lower() == 'true'
+                    #else:
+                    
                     #print(f"in get_operand symb_value AFTER {symb_value}")
                 else:
-                    return 53, (None, None)  # Error: Invalid operand types
+                    return 53, (None, None), (None, None)  # Error: Invalid operand types
 
             elif symb_type == 'int':
                 symb_value = self.parse_int(symb_value)
+                symb_actual_type = 'int'
+
                 if symb_value is None:
-                    return 53, (None, None)  # Error: Invalid operand types
+                    return 53, (None, None), (None, None)  # Error: Invalid operand types
 
             elif symb_type == 'bool':
                 symb_value = symb_value.lower() == 'true'
+                symb_actual_type = 'bool'
 
             elif symb_type == 'string':
                 symb_value = symb.value.encode('utf-8').decode('unicode_escape')
-                # symb_value is already a string
+                symb_actual_type = 'string'
 
             else:
-                return 53, (None, None)  # Error: Invalid operand types
-
+                return 53, (None, None), (None, None)  # Error: Invalid operand types
+            
             symb_values.append(symb_value)
+            symb_types.append(symb_actual_type)
 
         if symb2 is None:
             symb_values.append(None)
-            return 0, symb_values
+            symb_types.append(None)
+            return 0, symb_values, symb_types
         
-        return 0, symb_values
+        return 0, symb_values, symb_types
     
     def store_result(self, var, result):
         frame_name, variable_name = var.value.split('@', 1)
@@ -315,8 +328,8 @@ class IPPInterpreter:
 
         if frame_name not in self.frames:
             return 54  # Error: Access to a non-existent variable (frame exists)
-        
-        self.frames[frame_name][variable_name] = result
+        self.frames[frame_name][variable_name] = (result[0], result[1])
+        #print(f"self.frames[{frame_name}][{variable_name}] = ({result[0], result[1]})")
         return 0  # Success
 
 
@@ -332,12 +345,15 @@ class IPPInterpreter:
         except ValueError:
             return None
 
-    def move(self, variable_arg, symbol_arg):
-        variable = variable_arg.value
+    def move(self, var, symb):
+        error_code = self.is_variable_defined(var.value)
+        if error_code:
+            return error_code
+        variable = var.value
         frame_name, var_name = variable.split('@', 1)
         frame_name = frame_name.upper()
-
-        symbol_value = symbol_arg.value
+        #print(f"in move symb.arg_type = {symb.arg_type}")
+        symbol_value = symb.value
         if isinstance(symbol_value, str):
             if '@' not in symbol_value:
                 value = symbol_value
@@ -356,7 +372,7 @@ class IPPInterpreter:
             value = symbol_value
 
         if var_name in self.frames[frame_name]:
-            self.frames[frame_name][var_name] = value
+            self.frames[frame_name][var_name] = (value, symb.arg_type)
         else:
             return 54  # Error: Access to a non-existent variable (frame exists)
 
@@ -439,16 +455,17 @@ class IPPInterpreter:
         if error_code:
             return error_code
         
+        #is this needed anymore???
         if (symb1.arg_type != 'int' and symb1.arg_type !='var') or (symb2.arg_type != 'int' and symb2.arg_type !='var'):
             return 53
         
-        error_code, (symb1_value, symb2_value) = self.get_operand_values(symb1, symb2)
+        error_code, (symb1_value, symb2_value), (symb1_type, symb2_type) = self.get_operand_values(symb1, symb2)
         if error_code != 0:
             return error_code
-
-        #print(f"symb1_value type: {type(symb1_value)}, value: {symb1_value}")
-        #print(f"symb2_value type: {type(symb2_value)}, value: {symb2_value}")
-        result = symb1_value + symb2_value
+        if symb1_type != 'int' or symb2_type != 'int':
+            return 53
+        result = (symb1_value + symb2_value, int)
+        
         return self.store_result(var, result)
 
     def sub(self, var, symb1, symb2):
@@ -459,11 +476,13 @@ class IPPInterpreter:
         if (symb1.arg_type != 'int' and symb1.arg_type !='var') or (symb2.arg_type != 'int' and symb2.arg_type !='var'):
             return 53
         
-        error_code, (symb1_value, symb2_value) = self.get_operand_values(symb1, symb2)
+        error_code, (symb1_value, symb2_value), (symb1_type, symb2_type) = self.get_operand_values(symb1, symb2)
         if error_code != 0:
             return error_code
+        if symb1_type != 'int' or symb2_type != 'int':
+            return 53
 
-        result = symb1_value - symb2_value
+        result = (symb1_value - symb2_value, int)
         return self.store_result(var, result)
 
     def mul(self, var, symb1, symb2):
@@ -474,11 +493,13 @@ class IPPInterpreter:
         if (symb1.arg_type != 'int' and symb1.arg_type !='var') or (symb2.arg_type != 'int' and symb2.arg_type !='var'):
             return 53
         
-        error_code, (symb1_value, symb2_value) = self.get_operand_values(symb1, symb2)
+        error_code, (symb1_value, symb2_value), (symb1_type, symb2_type) = self.get_operand_values(symb1, symb2)
         if error_code != 0:
             return error_code
-
-        result = symb1_value * symb2_value
+        if symb1_type != 'int' or symb2_type != 'int':
+            return 53
+        
+        result = (symb1_value * symb2_value, int)
         return self.store_result(var, result)
 
     def idiv(self, var, symb1, symb2):
@@ -489,13 +510,15 @@ class IPPInterpreter:
         if (symb1.arg_type != 'int' and symb1.arg_type !='var') or (symb2.arg_type != 'int' and symb2.arg_type !='var'):
             return 53
         
-        error_code, (symb1_value, symb2_value) = self.get_operand_values(symb1, symb2)
+        error_code, (symb1_value, symb2_value), (symb1_type, symb2_type) = self.get_operand_values(symb1, symb2)
         if error_code != 0:
             return error_code
+        if symb1_type != 'int' or symb2_type != 'int':
+            return 53
         
         if symb2_value == 0:
             return 57
-        result = symb1_value // symb2_value
+        result = (symb1_value // symb2_value, int)
         return self.store_result(var, result)
     
     def lt_gt_eq(self, var, symb1, symb2):
@@ -537,28 +560,35 @@ class IPPInterpreter:
         if (symb1.arg_type != 'bool' and symb1.arg_type != 'var') or (symb2 is not None and symb2.arg_type != 'bool' and symb2.arg_type != 'var'):
             return 53
         
-        error_code, (symb1_value, symb2_value) = self.get_operand_values(symb1, symb2)
+        error_code, (symb1_value, symb2_value), (symb1_type, symb2_type) = self.get_operand_values(symb1, symb2)
         if error_code != 0:
             return error_code
-       
+        #print(f"(symb1_value, symb2_value), (symb1_type, symb2_type) = ({symb1_value},{symb2_value}), ({symb1_type}, {symb2_type})")
+        #print(f"type symb1_val {type(symb1_value),}, {type(symb1_type)}")
         opcode = self.instructions[self.current_position].opcode.upper()
-
+        
         if opcode == 'AND':
             if symb2_value is None:
                 return 53  # Error: Invalid operand types
+            if symb1_type != 'bool' or symb1_type != 'bool':
+                return 53
             result = symb1_value and symb2_value
         elif opcode == 'OR':
             if symb2_value is None:
                 return 53  # Error: Invalid operand types
+            if symb1_type != 'bool' or symb1_type != 'bool':
+                return 53
             result = symb1_value or symb2_value
         elif opcode == 'NOT':
-            print("")
-            print(f"debug: not {symb1_value}: {not symb1_value}")
+            if symb1_type != 'bool':
+                return 53
+            #print(f"debug: not {symb1_value}: {not symb1_value}")
             result = not symb1_value
             #print(f"result of not symb1_value {result}")
         else:
             return 32  # Error: Unknown opcode
-
+        
+        result = (result, int)
         return self.store_result(var, result)
 
     def int2char(self, var, symb):
@@ -621,11 +651,11 @@ class IPPInterpreter:
             if var_name not in self.frames[frame_name]:
                 return 56  # Error: Missing value (in a variable)
 
-            value = self.frames[frame_name][var_name]
-
+            value = self.frames[frame_name][var_name][0]
+        #print(f"value {value}")
         if type(value) == bool:
             output_value = 'true' if value else 'false'
-        elif value is None:
+        elif value is None or value == 'nil':
             output_value = ''
         else:
             output_value = str(value)
