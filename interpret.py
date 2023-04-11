@@ -252,13 +252,14 @@ class IPPInterpreter:
                 return 54   
         return 0
 
-    def get_operand_values(self, symb1, symb2):
+    def get_operand_values(self, symb1, symb2=None):
         symb_values = []
         for symb in [symb1, symb2]:
+            if symb is None: #NOT instruction behaviour
+                break
             symb_value = symb.value
             symb_type = symb.arg_type
             #print(f"in get_operand symb_value: {symb_value}, symb.value: {symb.value}, symb_type {symb_type}")
-            
             if symb_type == 'var':
                 if self.is_variable_identifier(symb_value):
                     frame_name, var_name = symb_value.split('@', 1)
@@ -273,11 +274,15 @@ class IPPInterpreter:
                     symb_value = self.frames[frame_name][var_name]
                     if symb_value is None:
                         return 56, (None, None)  # Error: Missing value (in a variable)
-                    
-                    if isinstance(self.frames[frame_name][var_name], str):
+                    #print(f"in get_operand symb_value {symb_value}")
+                    #print(f"in get_operand frame {self.frames[frame_name][var_name]}, value type {type(self.frames[frame_name][var_name])}")
+                    if isinstance(self.frames[frame_name][var_name], str) and (self.frames[frame_name][var_name] != 'true' and self.frames[frame_name][var_name] != 'false'):
                         symb_value = self.parse_int(self.frames[frame_name][var_name])
+                    elif isinstance(self.frames[frame_name][var_name], str) and (self.frames[frame_name][var_name] != 'true' or self.frames[frame_name][var_name] != 'false'):
+                        symb_value = self.frames[frame_name][var_name].lower() == 'true'
                     else:
                         symb_value = self.frames[frame_name][var_name]
+                    #print(f"in get_operand symb_value AFTER {symb_value}")
                 else:
                     return 53, (None, None)  # Error: Invalid operand types
 
@@ -298,6 +303,10 @@ class IPPInterpreter:
 
             symb_values.append(symb_value)
 
+        if symb2 is None:
+            symb_values.append(None)
+            return 0, symb_values
+        
         return 0, symb_values
     
     def store_result(self, var, result):
@@ -520,23 +529,37 @@ class IPPInterpreter:
         
         return self.store_result(var, result)
 
-    def and_or_not(self, operator, var, symb1, symb2=None):
-        if type(symb1) != bool or (symb2 is not None and type(symb2) != bool):
-            return 53  # Error: Invalid operand types
+    def and_or_not(self, var, symb1, symb2=None):
+        error_code = self.is_variable_defined(var.value)
+        if error_code:
+            return error_code
 
-        if operator == 'AND':
-            result = symb1 and symb2
-        elif operator == 'OR':
-            result = symb1 or symb2
-        elif operator == 'NOT':
-            result = not symb1
+        if (symb1.arg_type != 'bool' and symb1.arg_type != 'var') or (symb2 is not None and symb2.arg_type != 'bool' and symb2.arg_type != 'var'):
+            return 53
+        
+        error_code, (symb1_value, symb2_value) = self.get_operand_values(symb1, symb2)
+        if error_code != 0:
+            return error_code
+       
+        opcode = self.instructions[self.current_position].opcode.upper()
+
+        if opcode == 'AND':
+            if symb2_value is None:
+                return 53  # Error: Invalid operand types
+            result = symb1_value and symb2_value
+        elif opcode == 'OR':
+            if symb2_value is None:
+                return 53  # Error: Invalid operand types
+            result = symb1_value or symb2_value
+        elif opcode == 'NOT':
+            print("")
+            print(f"debug: not {symb1_value}: {not symb1_value}")
+            result = not symb1_value
+            #print(f"result of not symb1_value {result}")
         else:
-            return 53  # Error: Invalid operator
+            return 32  # Error: Unknown opcode
 
-        frame, variable_name = var.split('@', 1)
-        self.frames[frame][variable_name] = result
-
-        return 0  # Success
+        return self.store_result(var, result)
 
     def int2char(self, var, symb):
         if type(symb) != int:
@@ -650,18 +673,7 @@ class IPPInterpreter:
         return 0  # Success
     
     def type_instruction(self, var, symb):
-    #REDO COMPLETELY, get_operand_values nestaci...!!!!
-        error_code = self.is_variable_defined(var.value)
-        if error_code:
-            return error_code
- 
-        
-        error_code, (symb_value, symb_value) = self.get_operand_values(symb, symb)
-        if error_code != 0:
-            return error_code
-
-        frame, variable_name = var.value.split('@', 1)
-        self.frames[frame][variable_name] = type(symb_value).__name__
+    #REDO COMPLETELY, get_operand_values nestaci!!!!
         return 0  # Success
     
     def label_instruction(self, label):
