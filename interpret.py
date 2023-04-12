@@ -807,10 +807,14 @@ class IPPInterpreter:
         error_code, (symb1_value, symb2_value), (symb1_type, symb2_type) = self.get_operand_values(symb1, symb2)
         if error_code != 0:
             return error_code
-        
+        #print(f"symb1_type {symb1_type}, value: {symb1_value}")
+        #print(f"symb2_type {symb2_type}, value: {symb2_value}")
+        #print(f"{symb1_type == symb2_type or symb1_type == 'nil' or symb2_type == 'nil'}")
         if symb1_type == symb2_type or symb1_type == 'nil' or symb2_type == 'nil':
             if symb1_value == symb2_value:
                 return self.jump(label)
+            else:
+                return 0
         return 53
 
     def jumpifneq(self, label, symb1, symb2):
@@ -821,6 +825,8 @@ class IPPInterpreter:
         if symb1_type == symb2_type or symb1_type == 'nil' or symb2_type == 'nil':
             if symb1_value != symb2_value:
                 return self.jump(label)
+            else:
+                return 0
         return 53
 
     def exit(self, symb):
