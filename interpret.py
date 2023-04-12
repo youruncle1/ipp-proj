@@ -309,6 +309,10 @@ class IPPInterpreter:
             elif symb_type == 'string':
                 symb_value = symb.value.encode('utf-8').decode('unicode_escape')
                 symb_actual_type = 'string'
+            
+            elif symb_type == 'nil':
+                symb_value = 'nil'
+                symb_actual_type = 'nil'
 
             else:
                 return 53, (None, None), (None, None)  # wrong type
@@ -350,34 +354,12 @@ class IPPInterpreter:
         error_code = self.is_variable_defined(var.value)
         if error_code:
             return error_code
-        variable = var.value
-        frame_name, var_name = variable.split('@', 1)
-        frame_name = frame_name.upper()
         #print(f"in move symb.arg_type = {symb.arg_type}")
-        symbol_value = symb.value
-        if isinstance(symbol_value, str):
-            if '@' not in symbol_value:
-                value = symbol_value
-            else:
-                src_frame_name, src_var_name = symbol_value.split('@', 1)
-                src_frame_name = src_frame_name.upper()
+        error_code, (symb_value, symb_none), (symb_type, symb_none) = self.get_operand_values(symb, None)  
+        if error_code != 0:
+            return error_code
 
-                if src_frame_name not in self.frames:
-                    return 54  # Access to a non-existent variable (frame exists)
-
-                if src_var_name not in self.frames[src_frame_name]:
-                    return 56  # Uninitialized variable (missin val in a variable)
-
-                value = self.frames[src_frame_name][src_var_name]
-        else:
-            value = symbol_value
-
-        if var_name in self.frames[frame_name]:
-            self.frames[frame_name][var_name] = (value, symb.arg_type)
-        else:
-            return 54  # Access to a non-existent variable (frame exists)
-
-        return 0  
+        return self.store_result(var, (symb_value, symb_type))
 
     def create_frame(self):
         self.frames['TF'] = {}
@@ -593,7 +575,7 @@ class IPPInterpreter:
         else:
             return 32  # Invalid opcode
         
-        result = (result, 'int')
+        result = (result, 'bool')
         return self.store_result(var, result)
 
     def int2char(self, var, symb):
