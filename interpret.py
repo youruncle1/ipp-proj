@@ -282,15 +282,11 @@ class IPPInterpreter:
                     #print(f"in get_operand symb_value {symb_value}, value type {type(symb_value)}")
                     #print(f"in get_operand symb_actual_type {symb_actual_type}, value type {type(symb_actual_type)}")
                     if symb_actual_type == 'bool':
-                        symb_value = self.frames[frame_name][var_name][0] == 'true'
+                        symb_value = self.frames[frame_name][var_name][0] == True
+                        #print(f"{symb_value}, {self.frames[frame_name][var_name][0]}")
                     
                     if symb_actual_type == 'int':
                         symb_value = self.parse_int(str(self.frames[frame_name][var_name][0]))
-                    #if isinstance(self.frames[frame_name][var_name], str) and (self.frames[frame_name][var_name] != 'true' and self.frames[frame_name][var_name] != 'false'):
-                    #    symb_value = self.parse_int(self.frames[frame_name][var_name])
-                    #elif isinstance(self.frames[frame_name][var_name], str) and (self.frames[frame_name][var_name] != 'true' or self.frames[frame_name][var_name] != 'false'):
-                    #    symb_value = self.frames[frame_name][var_name].lower() == 'true'
-                    #else:
                     
                     #print(f"in get_operand symb_value AFTER {symb_value}")
                 else:
@@ -307,7 +303,7 @@ class IPPInterpreter:
                 symb_actual_type = 'bool'
 
             elif symb_type == 'string':
-                symb_value = symb.value.encode('utf-8').decode('unicode_escape')
+                symb_value = symb_value.encode('utf-8').decode('unicode_escape')
                 symb_actual_type = 'string'
             
             elif symb_type == 'nil':
@@ -418,18 +414,22 @@ class IPPInterpreter:
         return 0 
     
     def pushs(self, symb):
-        self.data_stack.append(symb)
-        return 0 
+        error_code, (symb_value, symb_none), (symb_type, symb_none) = self.get_operand_values(symb, None)
+        if error_code != 0:
+            return error_code
+        self.data_stack.append((symb_value, symb_type))
+        return 0
 
     def pops(self, var):
+        error_code = self.is_variable_defined(var.value)
+        if error_code:
+            return error_code
+        
         if len(self.data_stack) == 0:
             return 56  # Empty data stack
 
-        value = self.data_stack.pop()
-        frame, variable_name = var.split('@', 1)
-        self.frames[frame][variable_name] = value
-
-        return 0
+        symb_value, symb_type = self.data_stack.pop()
+        return self.store_result(var, (symb_value, symb_type))
 
     def add(self, var, symb1, symb2):
         error_code = self.is_variable_defined(var.value)
@@ -559,7 +559,9 @@ class IPPInterpreter:
                 return 53 
             if symb1_type != 'bool' or symb1_type != 'bool':
                 return 53
+            #print(f"before and {symb1_value}, {symb2_value}")
             result = symb1_value and symb2_value
+            #print(f"after and {symb1_value}, {symb2_value}")
         elif opcode == 'OR':
             if symb2_value is None:
                 return 53 
@@ -641,29 +643,20 @@ class IPPInterpreter:
         return 0  # Success
 
     def write(self, symb):
-        value = symb.value
-        
-        if self.is_variable_identifier(value):
-            frame_name, var_name = value.split('@', 1)
-            frame_name = frame_name.upper()
-
-            if frame_name not in self.frames:
-                return 54  # Access to a non-existent variable (frame exists)
-
-            if var_name not in self.frames[frame_name]:
-                return 56  # non initialized (missin val in variable)
-
-            value = self.frames[frame_name][var_name][0]
+    
+        error_code, (symb_value, symb_none), (symb_type, symb_none) = self.get_operand_values(symb, None)  
+        if error_code != 0:
+            return error_code
         
         opcode = self.instructions[self.current_position-1].opcode.upper()
         
-        #print(f"value {value}, opcode {opcode}, {self.instructions[self.current_position-1].opcode.upper() == 'TYPE'} ")
-        if type(value) == bool:
-            output_value = 'true' if value else 'false'
-        elif value is None or (value == 'nil' and self.instructions[self.current_position-1].opcode.upper() != 'TYPE'):
+        #print(f"value {symb_value}, opcode {opcode}, {self.instructions[self.current_position-1].opcode.upper() == 'TYPE'} ")
+        if symb_type == 'bool':
+            output_value = 'true' if symb_value else 'false'
+        elif symb_value is None or (symb_value == 'nil' and self.instructions[self.current_position-1].opcode.upper() != 'TYPE'):
             output_value = ''
         else:
-            output_value = str(value)
+            output_value = str(symb_value)
 
         print(output_value, end='')
         return 0 
