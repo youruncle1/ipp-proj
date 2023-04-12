@@ -886,44 +886,40 @@ class IPPInterpreter:
             if 0 < result < 49:
                 break
 
-def main():
-    args = argparser()
+args = argparser()
+
+if args.source:
+    try:
+        with open(args.source, "r") as file:
+            xml_string = file.read()
+    except IOError:
+        print(f"Error: Could not read file '{args.source}'", file=sys.stderr)
+        sys.exit(10)
+else:
+    xml_string = sys.stdin.read()
     
-    if args.source:
-        try:
-            with open(args.source, "r") as file:
-                xml_string = file.read()
-        except IOError:
-            print(f"Error: Could not read file '{args.source}'", file=sys.stderr)
-            sys.exit(10)
-    else:
-        xml_string = sys.stdin.read()
-        
-    if args.input:
-        try:
-            with open(args.input, "r") as file:
-                input_lines = [line.rstrip() for line in file]
-        except IOError:
-            print(f"Error: Could not read input file '{args.input}'", file=sys.stderr)
-            sys.exit(11)
-    else:
-        input_lines = []
-        
-    validator = XMLValidator(xml_string)
-    error_code, error_message = validator.validate()
-    if error_code:
-        print(f"Error {error_code}: {error_message}", file=sys.stderr)
-        exit(error_code)
+if args.input:
+    try:
+        with open(args.input, "r") as file:
+            input_lines = [line.rstrip() for line in file]
+    except IOError:
+        print(f"Error: Could not read input file '{args.input}'", file=sys.stderr)
+        sys.exit(11)
+else:
+    input_lines = []
+    
+validator = XMLValidator(xml_string)
+error_code, error_message = validator.validate()
+if error_code:
+    print(f"Error {error_code}: {error_message}", file=sys.stderr)
+    exit(error_code)
 
-    instructions, labels, error_code, error_message = validator.validate_instructions()  
-    if error_code:
-        print(f"Error {error_code}: {error_message}", file=sys.stderr)
-        exit(error_code)
+instructions, labels, error_code, error_message = validator.validate_instructions()  
+if error_code:
+    print(f"Error {error_code}: {error_message}", file=sys.stderr)
+    exit(error_code)
 
-    interpreter = IPPInterpreter(instructions, labels)
-    interpreter.input_lines = input_lines
-    error_code = interpreter.execute_instructions()
-    sys.exit(error_code) 
-
-if __name__ == "__main__":
-    main()
+interpreter = IPPInterpreter(instructions, labels)
+interpreter.input_lines = input_lines
+error_code = interpreter.execute_instructions()
+sys.exit(error_code) 
