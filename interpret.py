@@ -125,7 +125,7 @@ class XMLValidator:
                 return None, 32, f"Missing argument in Instruction Order {order}"
             arg_type = arg.get("type")
 
-            # Check if arg_type is in valid_argtypes (valid_argtypes)
+            # Check if arg_type is in valid_argtypes
             if arg_type not in self.valid_argtypes:
                 return None, 32, f"Invalid argument type '{arg_type}' in Instruction Order {order}"
 
@@ -181,7 +181,7 @@ class XMLValidator:
         return 0, None
 
 class IPPInterpreter:
-    def __init__(self, instructions, labels):
+    def __init__(self, instructions, labels, input_lines=None):
         self.frames = {
             'GF': {},
             'LF': None,
@@ -194,6 +194,12 @@ class IPPInterpreter:
         self.labels = labels
         self.current_position = 0
         self.executed_instructions_count = 0
+        
+        if input_lines is None:
+            self.input_lines = []
+        else:
+            self.input_lines = input_lines
+        self.input_line_index = 0
 
         self.instruction_mapping = {
             'MOVE': self.move,
@@ -338,7 +344,7 @@ class IPPInterpreter:
         frame_name = frame_name.upper()
 
         if frame_name not in self.frames:
-            return 54  # Access to a non-existent variable (frame exists)
+            return 54  # Access to a nonexist variable (but frame exists)
         self.frames[frame_name][variable_name] = (result[0], result[1])
         #print(f"self.frames[{frame_name}][{variable_name}] = ({result[0], result[1]})")
         return 0 
@@ -411,16 +417,14 @@ class IPPInterpreter:
         if label not in self.labels:
             return 52  # Undefined label
 
-        self.call_stack.append(self.current_instruction_index + 1)
-        self.current_instruction_index = self.labels[label]
-
-        return 0  
+        self.call_stack.append(self.current_position + 1)
+        return self.jump(label)
 
     def return_instruction(self):
         if len(self.call_stack) == 0:
             return 56  # Empty call stack
 
-        self.current_instruction_index = self.call_stack.pop()
+        self.current_position = self.call_stack.pop()
         return 0 
     
     def pushs(self, symb):
@@ -632,25 +636,34 @@ class IPPInterpreter:
         char = symb1_value[symb2_value]
         return self.store_result(var, (ord(char), 'int'))
 
-    def read(self, var, data_type):
-        input_value = input()
-
+    def read(self, var, type):
+        error_code = self.is_variable_defined(var.value)
+        if error_code:
+            return error_code
+        
+        type_regex = {
+            "string": r"^([^\\]|\\\d{3})*$",
+            "bool": r"^([^\\]|\\\d{3})*$",
+            "int": r"^(?:\+|-)?(?:(?!.*_{2})(?!0\d)\d+(?:_\d+)*|0[oO]?[0-7]+(_[0-7]+)*|0[xX][0-9a-fA-F]+(_[0-9a-fA-F]+)*)$"
+        }
         try:
-            if data_type == 'int':
-                converted_value = int(input_value)
-            elif data_type == 'string':
-                converted_value = str(input_value)
-            elif data_type == 'bool':
-                converted_value = input_value.lower() == 'true'
+            if self.input_line_index < len(self.input_lines):
+                input_value = self.input_lines[self.input_line_index]
+                self.input_line_index += 1
             else:
-                return 53  # Error: Invalid data type
-        except ValueError:
-            converted_value = None  # Store nil@nil in case of incorrect input
-
-        frame, variable_name = var.split('@', 1)
-        self.frames[frame][variable_name] = converted_value
-
-        return 0  # Success
+                input_value = input()
+            if re.match(type_regex[type.value.lower()], input_value):
+                if type.value.lower() == "string":
+                    self.store_result(var, (input_value, 'string'))
+                elif type.value.lower() == "bool":
+                    self.store_result(var, (input_value.lower() == "true", 'bool'))
+                elif type.value.lower() == "int":
+                    self.store_result(var, (int(input_value), 'int'))
+            else:
+                self.store_result(var, ('nil', 'nil'))
+        except Exception as e:
+            self.store_result(var, ('nil', 'nil'))
+        return 0
 
     def write(self, symb):
     
@@ -794,11 +807,11 @@ class IPPInterpreter:
         error_code, (symb1_value, symb2_value), (symb1_type, symb2_type) = self.get_operand_values(symb1, symb2)
         if error_code != 0:
             return error_code
-
+        
         if symb1_type == symb2_type or symb1_type == 'nil' or symb2_type == 'nil':
             if symb1_value == symb2_value:
                 return self.jump(label)
-        return 0
+        return 53
 
     def jumpifneq(self, label, symb1, symb2):
         error_code, (symb1_value, symb2_value), (symb1_type, symb2_type) = self.get_operand_values(symb1, symb2)
@@ -808,7 +821,7 @@ class IPPInterpreter:
         if symb1_type == symb2_type or symb1_type == 'nil' or symb2_type == 'nil':
             if symb1_value != symb2_value:
                 return self.jump(label)
-        return 0
+        return 53
 
     def exit(self, symb):
         error_code, (symb_value, symb_none), (symb_type, symb_none) = self.get_operand_values(symb, None)
@@ -838,7 +851,7 @@ class IPPInterpreter:
             #print(f"current_position {self.current_position}")
             instruction = self.instructions[self.current_position]
             
-            # Get instruction and its arguments
+            # instruct and args
             instr_name = instruction.opcode.upper()
             instr_name = instr_name.strip()
             args = instruction.args
@@ -880,6 +893,16 @@ def main():
     else:
         xml_string = sys.stdin.read()
         
+    if args.input:
+        try:
+            with open(args.input, "r") as file:
+                input_lines = [line.rstrip() for line in file]
+        except IOError:
+            print(f"Error: Could not read input file '{args.input}'", file=sys.stderr)
+            sys.exit(11)
+    else:
+        input_lines = []
+        
     validator = XMLValidator(xml_string)
     error_code, error_message = validator.validate()
     if error_code:
@@ -891,7 +914,8 @@ def main():
         print(f"Error {error_code}: {error_message}", file=sys.stderr)
         exit(error_code)
 
-    interpreter = IPPInterpreter(instructions, labels) 
+    interpreter = IPPInterpreter(instructions, labels)
+    interpreter.input_lines = input_lines
     error_code = interpreter.execute_instructions()
     sys.exit(error_code) 
 
