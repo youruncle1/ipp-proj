@@ -48,6 +48,10 @@ def argparser():
         parser.error("At least one of the parameters (--source or --input) must always be specified.")
 
     return args
+
+def replace_escapeSequences(match):
+    return chr(int(match.group(0)[1:]))
+
 class Instruction:
     def __init__(self, order, opcode, args):
         self.order = order
@@ -219,13 +223,13 @@ class IPPInterpreter:
             'STRLEN': self.strlen,
             'GETCHAR': self.getchar,
             'SETCHAR': self.setchar,
-            'TYPE': self.type_instruction,
-            'LABEL': self.label_instruction,
-            'JUMP': self.jump_instruction,
-            'JUMPIFEQ': self.jumpifeq_instruction,
-            'JUMPIFNEQ': self.jumpifneq_instruction,
-            'EXIT': self.exit_instruction,
-            'DPRINT': self.dprint_instruction,
+            'TYPE': self.type,
+            'LABEL': self.label,
+            'JUMP': self.jump,
+            'JUMPIFEQ': self.jumpifeq,
+            'JUMPIFNEQ': self.jumpifneq,
+            'EXIT': self.exit,
+            'DPRINT': self.dprint,
             'BREAK': self.break_instruction
         }
 
@@ -287,6 +291,11 @@ class IPPInterpreter:
                     
                     if symb_actual_type == 'int':
                         symb_value = self.parse_int(str(self.frames[frame_name][var_name][0]))
+                        
+                    if symb_actual_type == 'string':
+                        pattern = r'\\[0-9]{3}'
+                        symb_value = re.sub(pattern, replace_escapeSequences, self.frames[frame_name][var_name][0])
+                        symb_actual_type = 'string'
                     
                     #print(f"in get_operand symb_value AFTER {symb_value}")
                 else:
@@ -303,7 +312,8 @@ class IPPInterpreter:
                 symb_actual_type = 'bool'
 
             elif symb_type == 'string':
-                symb_value = symb_value.encode('utf-8').decode('unicode_escape')
+                pattern = r'\\[0-9]{3}'
+                symb_value = re.sub(pattern, replace_escapeSequences, symb_value)
                 symb_actual_type = 'string'
             
             elif symb_type == 'nil':
@@ -716,43 +726,34 @@ class IPPInterpreter:
         return self.store_result(var, (character, 'string'))
 
     def setchar(self, var, symb1, symb2):
-        pass
-    '''
-        def setchar(self, var, symb1, symb2):
         error_code = self.is_variable_defined(var.value)
         if error_code:
             return error_code
 
-        if symb1.arg_type not in ('int', 'bool', 'string', 'nil', 'var'):
-            return 53
-        if symb2.arg_type not in ('int', 'bool', 'string', 'nil', 'var'):
+        if symb1.arg_type not in ('int', 'bool', 'string', 'nil', 'var') or symb2.arg_type not in ('int', 'bool', 'string', 'nil', 'var'):
             return 53
 
-        error_code, var_value, var_type = self.get_operand_value(var)
+        error_code, (var_value, var_none), (var_type, var_none) = self.get_operand_values(var, None)
         if error_code != 0:
             return error_code
         if var_type != 'string':
             return 53
 
-        error_code, symb1_value, symb1_type = self.get_operand_value(symb1)
+        error_code, (symb1_value, symb2_value), (symb1_type, symb2_type) = self.get_operand_values(symb1, symb2)
         if error_code != 0:
             return error_code
-        if symb1_type != 'int':
+        if symb1_type != 'int' or symb2_type != 'string':
             return 53
-
-        error_code, symb2_value, symb2_type = self.get_operand_value(symb2)
-        if error_code != 0:
-            return error_code
-        if symb2_type != 'string' or len(symb2_value) == 0:
-            return 53
-
+        if len(symb2_value) == 0:
+            return 58
+        
         if symb1_value < 0 or symb1_value >= len(var_value):
             return 58
 
         modified_string = var_value[:symb1_value] + symb2_value[0] + var_value[symb1_value + 1:]
         return self.store_result(var, (modified_string, 'string'))
-    '''
-    def type_instruction(self, var, symb):
+
+    def type(self, var, symb):
         error_code = self.is_variable_defined(var.value)
         if error_code:
             return error_code
@@ -771,34 +772,45 @@ class IPPInterpreter:
             symb_type = symb.arg_type
 
         return self.store_result(var, (symb_type, 'string'))
-    
-    def label_instruction(self, label):
-        if label in self.labels:
-            return 52  #duplicate label
-        self.labels[label] = self.current_instruction_index
-        return 0 
 
-    def jump_instruction(self, label):
-        if label not in self.labels:
-            return 52  # Error: nonexistent label
-        self.current_instruction_index = self.labels[label]
-        return 0  # Success
+    def label(self, label):
+        # Labels are already preprocessed; no need to do anything here.
+        return 0
 
-    def jumpifeq_instruction(self, label, symb1, symb2):
-        if (type(symb1) != type(symb2)) and (symb1 is not None) and (symb2 is not None):
-            return 53  # Error: different types
-        if symb1 == symb2:
-            return self.jump_instruction(label)
-        return 0  # Success
-    
-    def jumpifneq_instruction(self, label, symb1, symb2):
-        if (type(symb1) != type(symb2)) and (symb1 is not None) and (symb2 is not None):
-            return 53  # Error: different types
-        if symb1 != symb2:
-            return self.jump_instruction(label)
-        return 0  
+    def jump(self, label):
+        if label.value not in self.labels:
+            return 52  # Undefined label
 
-    def exit_instruction(self, symb):
+        label_order = self.labels[label.value]
+        
+        for i, instruction in enumerate(self.instructions):
+            if instruction.order == label_order:
+                self.current_position = i
+                break
+
+        return 0
+
+    def jumpifeq(self, label, symb1, symb2):
+        error_code, (symb1_value, symb2_value), (symb1_type, symb2_type) = self.get_operand_values(symb1, symb2)
+        if error_code != 0:
+            return error_code
+
+        if symb1_type == symb2_type or symb1_type == 'nil' or symb2_type == 'nil':
+            if symb1_value == symb2_value:
+                return self.jump(label)
+        return 0
+
+    def jumpifneq(self, label, symb1, symb2):
+        error_code, (symb1_value, symb2_value), (symb1_type, symb2_type) = self.get_operand_values(symb1, symb2)
+        if error_code != 0:
+            return error_code
+
+        if symb1_type == symb2_type or symb1_type == 'nil' or symb2_type == 'nil':
+            if symb1_value != symb2_value:
+                return self.jump(label)
+        return 0
+
+    def exit(self, symb):
         error_code, (symb_value, symb_none), (symb_type, symb_none) = self.get_operand_values(symb, None)
         if error_code != 0:
             return error_code
@@ -808,7 +820,7 @@ class IPPInterpreter:
             sys.exit(symb_value)
         return 57 #wrong exit code
     
-    def dprint_instruction(self, symb):
+    def dprint(self, symb):
         print(symb, file=sys.stderr)
         return 0 
 
@@ -821,10 +833,11 @@ class IPPInterpreter:
         return 0 
     
     def execute_instructions(self):
-
+        
         while self.current_position < len(self.instructions):
+            #print(f"current_position {self.current_position}")
             instruction = self.instructions[self.current_position]
-
+            
             # Get instruction and its arguments
             instr_name = instruction.opcode.upper()
             instr_name = instr_name.strip()
@@ -843,13 +856,13 @@ class IPPInterpreter:
                     raise KeyError(f"Invalid instruction name: {instr_name}")
 
                 if result != 0:
-                    #print(f"Error code {result} occurred.")
+                    #print(f"Error code {result} .")
                     return result
 
                 self.executed_instructions_count += 1
                 self.current_position += 1
             except Exception as e:
-                #print(f"Error occurred: {e}")
+                #print(f"Error: {e}")
                 return e
             if 0 < result < 49:
                 break
