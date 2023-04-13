@@ -71,6 +71,8 @@ class Argument:
 ## class XMLValidator validates an IPPcode23 program formatted in XML.
 class XMLParser:
     def __init__(self, xml_string):
+        # Remove whitespaces from the XML string
+        xml_string = self.remove_whitespace_from_xml(xml_string)
         # Parse the xml_string using xml.etree.ElementTree and store to root attribute
         try:
             self.root = ET.fromstring(xml_string)
@@ -94,6 +96,26 @@ class XMLParser:
             "bool": r"^(true|false)$",
             "int": r"^(?:\+|-)?(?:(?!.*_{2})(?!0\d)\d+(?:_\d+)*|0[oO]?[0-7]+(_[0-7]+)*|0[xX][0-9a-fA-F]+(_[0-9a-fA-F]+)*)$"
         }
+        
+    @staticmethod
+    def remove_whitespace_from_xml(xml_string):
+
+        tree = ET.ElementTree(ET.fromstring(xml_string))
+        root = tree.getroot()
+
+        # Remove whitespace from elements
+        def remove_whitespace(element):
+            if element.text:
+                element.text = element.text.strip()
+            if element.tail:
+                element.tail = element.tail.strip()
+            for child in element:
+                remove_whitespace(child)
+
+        remove_whitespace(root)
+
+        # Convert the new XML back to a string
+        return ET.tostring(root, encoding='utf-8', method='xml').decode('utf-8')
 
     def check_header(self):
         # check if XML parsed successfully and then validate header
