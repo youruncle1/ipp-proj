@@ -98,9 +98,11 @@ class XMLParser:
     @staticmethod
     def remove_whitespace_from_xml(xml_string):
 
-        tree = ET.ElementTree(ET.fromstring(xml_string))
-        root = tree.getroot()
-
+        try:
+            tree = ET.ElementTree(ET.fromstring(xml_string))
+            root = tree.getroot()
+        except ET.ParseError:
+            return "", 31, "XML parse error"
         # Remove whitespace from elements
         def remove_whitespace(element):
             if element.text:
@@ -113,7 +115,7 @@ class XMLParser:
         remove_whitespace(root)
 
         # Convert the new XML back to a string
-        return ET.tostring(root, encoding='utf-8', method='xml').decode('utf-8')
+        return ET.tostring(root, encoding='utf-8', method='xml').decode('utf-8'), 0, ""
 
     def check_header(self):
         # check if XML parsed successfully and then validate header
@@ -993,7 +995,11 @@ else:
     input_lines = []
 
 # Remove whitespaces from the XML string
-xml_string = XMLParser.remove_whitespace_from_xml(xml_string)
+xml_string, error_code, error_message = XMLParser.remove_whitespace_from_xml(xml_string)
+if error_code:
+    print(f"ERROR {error_code}: {error_message}", file=sys.stderr)
+    exit(error_code)
+    
 # read XML input, parse it and store to xmlparser
 xmlparser = XMLParser(xml_string)
 error_code, error_message = xmlparser.validate()
