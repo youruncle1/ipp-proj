@@ -414,16 +414,16 @@ class IPPInterpreter:
         return 0 
     
     def call(self, label):
-        if label not in self.labels:
+        if label.value not in self.labels:
             return 52  # Undefined label
 
-        self.call_stack.append(self.current_position + 1)
+        self.call_stack.append(self.current_position)
         return self.jump(label)
 
     def return_instruction(self):
         if len(self.call_stack) == 0:
             return 56  # Empty call stack
-
+        #print(f"in return: len(call_stack) {len(self.call_stack)}, call_stack {self.call_stack}")
         self.current_position = self.call_stack.pop()
         return 0 
     
@@ -641,28 +641,26 @@ class IPPInterpreter:
         if error_code:
             return error_code
         
-        type_regex = {
-            "string": r"^([^\\]|\\\d{3})*$",
-            "bool": r"^([^\\]|\\\d{3})*$",
-            "int": r"^(?:\+|-)?(?:(?!.*_{2})(?!0\d)\d+(?:_\d+)*|0[oO]?[0-7]+(_[0-7]+)*|0[xX][0-9a-fA-F]+(_[0-9a-fA-F]+)*)$"
-        }
         try:
             if self.input_line_index < len(self.input_lines):
                 input_value = self.input_lines[self.input_line_index]
                 self.input_line_index += 1
             else:
                 input_value = input()
-            if re.match(type_regex[type.value.lower()], input_value):
-                if type.value.lower() == "string":
-                    self.store_result(var, (input_value, 'string'))
-                elif type.value.lower() == "bool":
-                    self.store_result(var, (input_value.lower() == "true", 'bool'))
-                elif type.value.lower() == "int":
-                    self.store_result(var, (int(input_value), 'int'))
-            else:
-                self.store_result(var, ('nil', 'nil'))
+                
+            if type.value.lower() == "string":
+                self.store_result(var, (input_value, 'string'))
+            elif type.value.lower() == "bool":
+                self.store_result(var, (input_value.lower() == "true", 'bool'))
+            elif type.value.lower() == "int":
+                intvalue = self.parse_int(input_value)
+                if intvalue is None:
+                    self.store_result(var, ('nil', 'nil'))
+                else:
+                    self.store_result(var, (self.parse_int(input_value), 'int'))
         except Exception as e:
             self.store_result(var, ('nil', 'nil'))
+        
         return 0
 
     def write(self, symb):
@@ -804,6 +802,9 @@ class IPPInterpreter:
         return 0
 
     def jumpifeq(self, label, symb1, symb2):
+        if label.value not in self.labels:
+            return 52  # Undefined label
+        
         error_code, (symb1_value, symb2_value), (symb1_type, symb2_type) = self.get_operand_values(symb1, symb2)
         if error_code != 0:
             return error_code
@@ -818,6 +819,9 @@ class IPPInterpreter:
         return 53
 
     def jumpifneq(self, label, symb1, symb2):
+        if label.value not in self.labels:
+            return 52  # Undefined label
+        
         error_code, (symb1_value, symb2_value), (symb1_type, symb2_type) = self.get_operand_values(symb1, symb2)
         if error_code != 0:
             return error_code
@@ -894,7 +898,7 @@ if args.source:
             xml_string = file.read()
     except IOError:
         print(f"Error: Could not read file '{args.source}'", file=sys.stderr)
-        sys.exit(10)
+        sys.exit(11)
 else:
     xml_string = sys.stdin.read()
     
