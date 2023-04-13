@@ -277,7 +277,7 @@ class IPPInterpreter:
                         return 55, f"Accessing '{var_name}' in Frame '{frame_name}', '{frame_name}' does not exist", (None, None), (None, None)
 
                     if var_name not in self.frames[frame_name]:
-                        return 54, f"Access to a non-existent variable '{var_name}' in Frame '{frame_name}'", (None, None), (None, None)
+                        return 54, f"Accessing to a non-existent variable '{var_name}' in Frame '{frame_name}'", (None, None), (None, None)
 
                     if self.frames[frame_name][var_name] is None:
                         return 56, f"Missing value in variable '{var_name}' in Frame '{frame_name}'", (None, None), (None, None)
@@ -558,7 +558,7 @@ class IPPInterpreter:
             return error_code, error_message
         
         if symb_type != 'int':
-            return 53, f"Unsupported operand value type(s): '{symb_type}'"
+            return 53, f"Unsupported operand type(s): '{symb_type}'"
 
         try:
             char = chr(symb_value)
@@ -581,7 +581,7 @@ class IPPInterpreter:
             return error_code, error_message
         
         if symb1_type != 'string' or symb2_type != 'int':
-            return 53, f"Unsupported operand value type(s): '{symb1_type}' and '{symb2_type}'"
+            return 53, f"Unsupported operand type(s): '{symb1_type}' and '{symb2_type}'"
 
         if symb2_value < 0 or symb2_value >= len(symb1_value):
             return 58, "Invalid string operation: indexing outside the given string"
@@ -643,7 +643,7 @@ class IPPInterpreter:
         if error_code != 0:
             return error_code, error_message
         if symb1_type != 'string' or symb2_type != 'string':
-            return 53, f"Unsupported operand type(s) '{symb1_type}', '{symb2_type}'"
+            return 53, f"Unsupported operand type(s) '{symb1_type}' or '{symb2_type}'"
 
         result = symb1_value + symb2_value
         return self.store_result(var, (result, 'string'))
@@ -658,7 +658,7 @@ class IPPInterpreter:
             return error_code, error_message
         
         if symb_type != 'string':
-            return 53, f"Unsupported operand value type(s): '{symb_type}'"
+            return 53, f"Unsupported operand type(s): '{symb_type}'"
 
         string_length = len(symb_value)
         return self.store_result(var, (string_length, 'int'))
@@ -672,7 +672,7 @@ class IPPInterpreter:
         if error_code != 0:
             return error_code, error_message
         if symb1_type != 'string' or symb2_type != 'int':
-            return 53, f"Unsupported operand value type(s): '{symb1_type}' or '{symb2_type}'"
+            return 53, f"Unsupported operand type(s): '{symb1_type}' or '{symb2_type}'"
 
         if symb2_value < 0 or symb2_value >= len(symb1_value):
             return 58, "Invalid string operation: indexing outside the given string"
@@ -689,18 +689,18 @@ class IPPInterpreter:
         if error_code != 0:
             return error_code, error_message
         if var_type != 'string':
-            return 53, "Wrong type"
+            return 53, "Wrong operand <var> type '{var_type}'"
 
         error_code, error_message, (symb1_value, symb2_value), (symb1_type, symb2_type) = self.get_operand_values(symb1, symb2)
         if error_code != 0:
             return error_code, error_message
         if symb1_type != 'int' or symb2_type != 'string':
-            return 53, "Wrong type"
+            return 53, f"Unsupported operand type(s): '{symb1_type}' or '{symb2_type}'"
         if len(symb2_value) == 0:
-            return 58, "Invalid string operation"
+            return 58, "Invalid string operation: operand <symb2> is of length 0"
         
         if symb1_value < 0 or symb1_value >= len(var_value):
-            return 58, "Invalid string operation"
+            return 58, "Invalid string operation: indexing outside the given string"
 
         modified_string = var_value[:symb1_value] + symb2_value[0] + var_value[symb1_value + 1:]
         return self.store_result(var, (modified_string, 'string'))
@@ -712,7 +712,7 @@ class IPPInterpreter:
             return error_code, error_message
 
         if symb.arg_type not in ('int', 'bool', 'string', 'nil', 'var'):
-            return 53, "Wrong type"
+            return 53, f"Unsupported operand type(s): '{symb.arg_type}'"
 
         symb_value, symb_type = None, None
         if symb.arg_type == 'var':
@@ -756,7 +756,7 @@ class IPPInterpreter:
                 return self.jump(label)
             else:
                 return 0, ""
-        return 53, "Wrong type"
+        return 53, f"Unsupported operand type(s) for {self.instructions[self.current_position].opcode.upper()}: '{symb1_type}' and '{symb2_type}'"
 
     def jumpifneq(self, label, symb1, symb2):
         if label.value not in self.labels:
@@ -771,17 +771,17 @@ class IPPInterpreter:
                 return self.jump(label)
             else:
                 return 0, ""
-        return 53, "Wrong type"
+        return 53, f"Unsupported operand type(s) for {self.instructions[self.current_position].opcode.upper()}: '{symb1_type}' and '{symb2_type}'"
 
     def exit(self, symb):
         error_code, error_message, (symb_value, symb_none), (symb_type, symb_none) = self.get_operand_values(symb, None)
         if error_code != 0:
             return error_code, error_message
         if symb_type != 'int':
-            return 53, "Wrong type" #wrong type
+            return 53, f"Unsupported operand type(s) '{symb_type}'"
         if 0 <= symb_value <= 49:
             sys.exit(symb_value)
-        return 57, f"Invalid exit code {symb_value}" #wrong exit code
+        return 57, f"Invalid exit code {symb_value}"
     
     def dprint(self, symb):
         print(symb, file=sys.stderr)
