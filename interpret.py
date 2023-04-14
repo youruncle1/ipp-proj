@@ -1,9 +1,14 @@
+'''
+IPP 22/23 Projekt 2 -  Interpret XML reprezentace kódu (interpret.py)
+autor: xpolia05
+'''
+
 import argparse
 import sys
 import re
 import xml.etree.ElementTree as ET
 
-# parses command-line arguments
+# Parses command-line arguments
 def argparser():
     parser = argparse.ArgumentParser(
         description="Interpreter for IPPcode23.",
@@ -50,7 +55,7 @@ def argparser():
 
     return args
 
-# replaces unicode escape sequences to ascii (e.g. \035 -> #)
+# Replaces unicode escape sequences to ascii (e.g. \035 -> #)
 def replace_escapeSequences(match):
     return chr(int(match.group(0)[1:]))
 
@@ -221,7 +226,7 @@ class XMLParser:
             return error_code, error_message
 
         return 0, None
-
+#### END OF CLASS XMLParser
 
 class IPPInterpreter:
     def __init__(self, instructions, labels, input_lines=None):
@@ -932,7 +937,6 @@ class IPPInterpreter:
 
     # Prints information about program that is being interpreted
     def break_instruction(self):
-        # TODO!!! prints objects instead of values in Frames
         print(f"Position in code: {self.current_position+1}", file=sys.stderr)
         print(f"Global frame: {self.frames['GF']}", file=sys.stderr)
         print(f"Local frame: {self.frames['LF']}", file=sys.stderr)
@@ -968,11 +972,12 @@ class IPPInterpreter:
             if 0 < error_code < 49:
                 break
         return 0, "", self.current_position, instr_name
+#### END OF CLASS IPPInterpreter 
 
-# parse command-line arguments
+# Parse command-line arguments
 args = argparser()
 
-# open source file
+# Open source file or read fro stdin
 if args.source:
     try:
         with open(args.source, "r") as file:
@@ -983,7 +988,7 @@ if args.source:
 else:
     xml_string = sys.stdin.read()
     
-# open input file
+# Open input file or read from stdin
 if args.input:
     try:
         with open(args.input, "r") as file:
@@ -994,26 +999,26 @@ if args.input:
 else:
     input_lines = []
 
-# Remove whitespaces from the XML string
+# Remove whitespaces from the elements in XML string
 xml_string, error_code, error_message = XMLParser.remove_whitespace_from_xml(xml_string)
 if error_code:
     print(f"ERROR {error_code}: {error_message}", file=sys.stderr)
     exit(error_code)
     
-# read XML input, parse it and store to xmlparser
+# Read XML input, parse it and store to xmlparser
 xmlparser = XMLParser(xml_string)
 error_code, error_message = xmlparser.validate()
 if error_code:
     print(f"ERROR {error_code}: {error_message}", file=sys.stderr)
     exit(error_code)
 
-# load instructions from xmlparser
+# Load instructions and labels from xmlparser
 instructions, labels, error_code, error_message = xmlparser.validate_instructions()  
 if error_code:
     print(f"ERROR {error_code}: {error_message}", file=sys.stderr)
     exit(error_code)
 
-# create instance of interpreter class with, store input, execute instructions
+# Create instance of interpreter class, store instructions and labels from XMLParser, input, and execute instructions
 interpreter = IPPInterpreter(instructions, labels, input_lines)
 error_code, error_message, current_position, instr_name = interpreter.execute_instructions()
 
@@ -1021,4 +1026,3 @@ if error_code != 0:
     print(f"ERROR {error_code} at instr. order {current_position+1} '{instr_name}': {error_message}", file=sys.stderr)
 
 sys.exit(error_code)
-
