@@ -78,7 +78,7 @@ class Argument:
         self.value = value
         self.order = order 
 
-## class XMLValidator validates an IPPcode23 program formatted in XML.
+## class XMLParser validates an IPPcode23 program formatted in XML
 class XMLParser:
     def __init__(self, xml_string):
         # Parse the xml_string using xml.etree.ElementTree and store to root attribute
@@ -86,6 +86,7 @@ class XMLParser:
             self.root = ET.fromstring(xml_string)
         except ET.ParseError:
             self.root = None
+        
         # valid opcodes : required number of arguments 
         self.valid_opcodes = {
             'CREATEFRAME': 0, 'PUSHFRAME': 0, 'POPFRAME': 0, 'RETURN': 0, 'BREAK': 0,
@@ -105,6 +106,7 @@ class XMLParser:
             "int": r"^(?:\+|-)?(?:(?!.*_{2})(?!0\d)\d+(?:_\d+)*|0[oO]?[0-7]+(_[0-7]+)*|0[xX][0-9a-fA-F]+(_[0-9a-fA-F]+)*)$"
         }
         
+        # map opcodes to subclasses of abstract class Instructiom
         self.opcode_to_class_map = {
             'MOVE': Move,
             'CREATEFRAME': CreateFrame,
@@ -291,10 +293,12 @@ class IPPInterpreter:
         self.executed_instructions_count = 0 # intented for debug instruction BREAK
         
         # set input 
-        if input_lines is None:
+        if input_lines is None or len(input_lines) == 0:
             self.input_lines = []
+            self.has_input = False
         else:
             self.input_lines = input_lines
+            self.has_input = True
         self.input_line_index = 0
 
     # Check if a variable is defined.
@@ -430,9 +434,9 @@ class IPPInterpreter:
         
     def execute_instructions(self):
         instr_name = ""
+        
         while self.current_position < len(self.instructions):
             instruction = self.instructions[self.current_position]
-
             instr_name = instruction.opcode.upper()
             instr_name = instr_name.strip()
             args = instruction.args
@@ -447,9 +451,6 @@ class IPPInterpreter:
                 self.current_position += 1
             except Exception as e:
                 return -1, str(e), self.current_position, instr_name
-
-            if 0 < error_code < 49:
-                break
 
         return 0, None, self.current_position, instr_name
 #### END OF CLASS IPPInterpreter 
@@ -481,6 +482,7 @@ class CreateFrame(Instruction):
         super().__init__(order, opcode, args)
 
     def execute(self, interpreter):
+        # Create a new temporary frame (TF)
         interpreter.frames['TF'] = {}
         return 0, ""
 
@@ -489,9 +491,11 @@ class PushFrame(Instruction):
         super().__init__(order, opcode, args)
 
     def execute(self, interpreter):
+        # Check if the temporary frame (TF) is defined
         if interpreter.frames['TF'] is None:
             return 55, "Push to undefined frame (TF)"
 
+        # Push the temporary frame (TF) onto the frame stack and set it as the local frame (LF)
         interpreter.frame_stack.append(interpreter.frames['TF'])
         interpreter.frames['LF'] = interpreter.frames['TF']
         interpreter.frames['TF'] = None
@@ -521,13 +525,16 @@ class DefVar(Instruction):
     def execute(self, interpreter):
         variable = self.args[0].value
 
+        # Check if the frame exists
         frame_name, var_name = variable.split('@')
         if frame_name not in interpreter.frames or interpreter.frames[frame_name] is None:
             return 55, f"Accessing '{var_name}' in Frame '{frame_name}', '{frame_name}' does not exist"
 
+        # Check if the variable is already defined in the frame
         if var_name in interpreter.frames[frame_name]:
             return 52, f"Redefining existing variable {var_name} in Frame {frame_name}"
 
+        # Define the variable in the frame
         interpreter.frames[frame_name][var_name] = None
         return 0, ""
 
@@ -538,12 +545,14 @@ class Call(Instruction):
     def execute(self, interpreter):
         label = self.args[0].value
 
+        # Check if the label exists
         if label not in interpreter.labels:
             return 52, f"Call to Undefined label '{label}'"
-
-        interpreter.call_stack.append(interpreter.current_position)
         
-        jump_instruction = Jump(self.order, "JUMP", [self.args[0]])  # Create a new Jump instance with the same order and label
+        # Save the current position on the call stack and jump to the label
+        interpreter.call_stack.append(interpreter.current_position)
+        # use new instance of instruction Jump and execute it
+        jump_instruction = Jump(self.order, "JUMP", [self.args[0]])
         return jump_instruction.execute(interpreter)
 
 class ReturnInstruction(Instruction):
@@ -551,9 +560,11 @@ class ReturnInstruction(Instruction):
         super().__init__(order, opcode, args)
 
     def execute(self, interpreter):
+        # Check if the call stack is empty
         if len(interpreter.call_stack) == 0:
             return 56, "Return: Empty call stack"
 
+         # Pop the saved position from the call stack and set the current position
         interpreter.current_position = interpreter.call_stack.pop()
         return 0, ""
 
@@ -562,10 +573,12 @@ class Pushs(Instruction):
         super().__init__(order, opcode, args)
 
     def execute(self, interpreter):
+        # Get the value and type of the operand(s)
         error_code, error_message, (symb_value, symb_none), (symb_type, symb_none) = interpreter.get_operand_values(self.args[0], None)
         if error_code != 0:
             return error_code, error_message
 
+        # Push the value and type onto the data stack
         interpreter.data_stack.append((symb_value, symb_type))
         return 0, ""
 
@@ -574,15 +587,19 @@ class Pops(Instruction):
         super().__init__(order, opcode, args)
 
     def execute(self, interpreter):
+        # Check if the destination variable is defined
         error_code, error_message = interpreter.is_variable_defined(self.args[0].value)
         if error_code:
             return error_code, error_message
 
+        # Check if the data stack is empty
         if len(interpreter.data_stack) == 0:
             return 56, "Pops: Empty data stack"
 
+        # Pop the value and type from the data stack
         symb_value, symb_type = interpreter.data_stack.pop()
 
+        # Store the result in the destination variable
         error_code, error_message = interpreter.store_result(self.args[0], (symb_value, symb_type))
         return error_code, error_message
     
@@ -592,19 +609,25 @@ class AddSubMulIdiv(Instruction):
 
     def execute(self, interpreter):
         var, symb1, symb2 = self.args
+        
+        # Check if the destination variable is defined
         error_code, error_message = interpreter.is_variable_defined(var.value)
         if error_code:
             return error_code, error_message
-
+        
+        # Get the value and type of the operand(s)
         error_code, error_message, (symb1_value, symb2_value), (symb1_type, symb2_type) = interpreter.get_operand_values(symb1, symb2)
         if error_code != 0:
             return error_code, error_message
 
+        # Check if both operands are integers
         if symb1_type != 'int' or symb2_type != 'int':
             return 53, f"Unsupported operand type(s) for {self.opcode.upper()}: '{symb1_type}' and '{symb2_type}'"
 
+        # Get the current opcode
         opcode = self.opcode.upper()
 
+        # Use instruction based on the opcode
         if opcode == 'ADD':
             result = (symb1_value + symb2_value, 'int')
         elif opcode == 'SUB':
@@ -618,6 +641,7 @@ class AddSubMulIdiv(Instruction):
         else:
             return 32, "Invalid opcode"
 
+        # Store the result in the destination variable
         error_code, error_message = interpreter.store_result(var, result)
         return error_code, error_message
 
@@ -627,19 +651,25 @@ class LtGtEq(Instruction):
 
     def execute(self, interpreter):
         var, symb1, symb2 = self.args
+        
+        # Check if the destination variable is defined
         error_code, error_message = interpreter.is_variable_defined(var.value)
         if error_code:
             return error_code, error_message
 
+        # Get the value and type of the operand(s)
         error_code, error_message, (symb1_value, symb2_value), (symb1_type, symb2_type) = interpreter.get_operand_values(symb1, symb2)
         if error_code != 0:
             return error_code, error_message
 
+        # Check if the operand types are the same or if one of them is 'nil'
         if symb1_type != symb2_type and (symb1_type != 'nil' and symb2_type != 'nil'):
             return 53, f"Unsupported operand type(s) for {self.opcode.upper()}: '{symb1_type}' and '{symb2_type}'"
 
+        # Get the current opcode
         opcode = self.opcode.upper()
 
+        # Use instruction based on the opcode
         if opcode == 'EQ':
             if symb1_type == 'nil' or symb2_type == 'nil':
                 result = symb1_type == symb2_type
@@ -656,6 +686,7 @@ class LtGtEq(Instruction):
         else:
             return 32, "Invalid opcode"
 
+        # Store the result in the destination variable
         error_code, error_message = interpreter.store_result(var, (result, 'bool'))
         return error_code, error_message
 
@@ -671,7 +702,8 @@ class AndOrNot(Instruction):
             symb2 = None
         else:
             var, symb1, symb2 = self.args
-            
+        
+        # Check if the destination variable is defined  
         error_code, error_message = interpreter.is_variable_defined(var.value)
         if error_code:
             return error_code, error_message
@@ -682,12 +714,12 @@ class AndOrNot(Instruction):
             else:
                 return 53, f"Unsupported operand type(s) for {self.opcode.upper()}: '{symb1.arg_type}' and '{symb2.arg_type}'"
 
+        # Get the value and type of the operand(s)
         error_code, error_message, (symb1_value, symb2_value), (symb1_type, symb2_type) = interpreter.get_operand_values(symb1, symb2)
         if error_code != 0:
             return error_code, error_message
 
-        opcode = self.opcode.upper()
-
+        # Use instruction based on the opcode
         if opcode == 'AND':
             if symb1_type != 'bool' or symb2_type != 'bool':
                 return 53, f"Unsupported operand type(s) for {self.opcode.upper()}: '{symb1_type}' and '{symb2_type}'"
@@ -709,6 +741,7 @@ class AndOrNot(Instruction):
         else:
             return 32, f"Invalid opcode {opcode}"
 
+        # Store the result in the destination variable
         result = (result, 'bool')
         error_code, error_message = interpreter.store_result(var, result)
         return error_code, error_message
@@ -720,10 +753,13 @@ class Int2Char(Instruction):
 
     def execute(self, interpreter):
         var, symb = self.args
+        
+        # Check if the destination variable is defined
         error_code, error_message = interpreter.is_variable_defined(var.value)
         if error_code:
             return error_code, error_message
 
+        # Get the value and type of the operand(s)
         error_code, error_message, (symb_value, symb_none), (symb_type, symb_none) = interpreter.get_operand_values(symb, None)
         if error_code != 0:
             return error_code, error_message
@@ -731,11 +767,13 @@ class Int2Char(Instruction):
         if symb_type != 'int':
             return 53, f"Unsupported operand type(s): '{symb_type}'"
 
+        # Try to convert the integer to a Unicode character using chr()
         try:
             char = chr(symb_value)
         except ValueError:
             return 58, "Invalid Unicode value"
 
+        # Store the result in the destination variable
         error_code, error_message = interpreter.store_result(var, (char, 'string'))
         return error_code, error_message
 
@@ -745,20 +783,26 @@ class Stri2Int(Instruction):
 
     def execute(self, interpreter):
         var, symb1, symb2 = self.args
+        
+        # Check if the destination variable is defined
         error_code, error_message = interpreter.is_variable_defined(var.value)
         if error_code:
             return error_code, error_message
 
+        # Get the value and type of the operand(s)
         error_code, error_message, (symb1_value, symb2_value), (symb1_type, symb2_type) = interpreter.get_operand_values(symb1, symb2)
         if error_code != 0:
             return error_code, error_message
 
+        # Check if the operand types are 'string' and 'int'
         if symb1_type != 'string' or symb2_type != 'int':
             return 53, f"Unsupported operand type(s): '{symb1_type}' and '{symb2_type}'"
 
+        # Check if the index is within the string bounds
         if symb2_value < 0 or symb2_value >= len(symb1_value):
             return 58, "Invalid string operation: indexing outside the given string"
 
+        # Store the result in the destination variable
         char = symb1_value[symb2_value]
         error_code, error_message = interpreter.store_result(var, (ord(char), 'int'))
         return error_code, error_message
@@ -770,17 +814,21 @@ class Read(Instruction):
 
     def execute(self, interpreter):
         var, type = self.args
+        
+        # Check if the destination variable is defined
         error_code, error_message = interpreter.is_variable_defined(var.value)
         if error_code:
             return error_code, error_message
 
         try:
-            if interpreter.input_line_index < len(interpreter.input_lines):
-                input_value = interpreter.input_lines[interpreter.input_line_index]
+            # Read from input_lines if available(file input), otherwise read from standard input
+            if interpreter.input_line_index < len(interpreter.input_lines) or not interpreter.has_input:
+                input_value = interpreter.input_lines[interpreter.input_line_index] if interpreter.has_input else ''
                 interpreter.input_line_index += 1
             else:
                 input_value = input()
 
+            # Store the input value based on the specified type 
             if type.value.lower() == "string":
                 error_code, error_message = interpreter.store_result(var, (input_value, 'string'))
             elif type.value.lower() == "bool":
@@ -791,6 +839,7 @@ class Read(Instruction):
                     error_code, error_message = interpreter.store_result(var, ('nil', 'nil'))
                 else:
                     error_code, error_message = interpreter.store_result(var, (interpreter.parse_int(input_value), 'int'))
+        # Store 'nil' if an error happens during reading
         except Exception as e:
             error_code, error_message = interpreter.store_result(var, ('nil', 'nil'))
 
@@ -803,12 +852,16 @@ class Write(Instruction):
 
     def execute(self, interpreter):
         symb = self.args[0]
+        
+        # Get the value and type of the operand(s)
         error_code, error_message, (symb_value, symb_none), (symb_type, symb_none) = interpreter.get_operand_values(symb, None)
         if error_code != 0:
             return error_code, error_message
 
+        # Get the current opcode
         opcode = self.opcode.upper()
 
+        # Convert the value to a string for output
         if symb_type == 'bool':
             output_value = 'true' if symb_value else 'false'
         elif symb_value is None or (symb_value == 'nil' and symb_type == 'nil'):
@@ -825,17 +878,22 @@ class Concat(Instruction):
 
     def execute(self, interpreter):
         var, symb1, symb2 = self.args
+        
+        # Check if the destination variable is defined
         error_code, error_message = interpreter.is_variable_defined(var.value)
         if error_code:
             return error_code, error_message
 
+        # Get the value and type of the operand(s)
         error_code, error_message, (symb1_value, symb2_value), (symb1_type, symb2_type) = interpreter.get_operand_values(symb1, symb2)
         if error_code != 0:
             return error_code, error_message
 
+        # Check if both operands are strings
         if symb1_type != 'string' or symb2_type != 'string':
             return 53, f"Unsupported operand type(s) '{symb1_type}' or '{symb2_type}'"
 
+        # Store the result in the destination variable
         result = symb1_value + symb2_value
         return interpreter.store_result(var, (result, 'string'))
 
@@ -846,17 +904,22 @@ class Strlen(Instruction):
 
     def execute(self, interpreter):
         var, symb = self.args
+        
+        # Check if the destination variable is defined
         error_code, error_message = interpreter.is_variable_defined(var.value)
         if error_code:
             return error_code, error_message
 
+        # Get the value and type of the operand(s)
         error_code, error_message, (symb_value, symb_none), (symb_type, symb_none) = interpreter.get_operand_values(symb, None)
         if error_code != 0:
             return error_code, error_message
 
+        # Check if the operand type is 'string'
         if symb_type != 'string':
             return 53, f"Unsupported operand type(s): '{symb_type}'"
 
+        # Getthe length of the string and store the result in the destination variable
         string_length = len(symb_value)
         return interpreter.store_result(var, (string_length, 'int'))
 
@@ -866,20 +929,26 @@ class Getchar(Instruction):
 
     def execute(self, interpreter):
         var, symb1, symb2 = self.args
+        
+        # Check if the destination variable is defined
         error_code, error_message = interpreter.is_variable_defined(var.value)
         if error_code:
             return error_code, error_message
 
+        # Get the value and type of the operand(s)
         error_code, error_message, (symb1_value, symb2_value), (symb1_type, symb2_type) = interpreter.get_operand_values(symb1, symb2)
         if error_code != 0:
             return error_code, error_message
 
+        # Check if the operand types are 'string' and 'int'
         if symb1_type != 'string' or symb2_type != 'int':
             return 53, f"Unsupported operand type(s): '{symb1_type}' or '{symb2_type}'"
 
+        # Check if the index is within the string indexing
         if symb2_value < 0 or symb2_value >= len(symb1_value):
             return 58, "Invalid string operation: indexing outside the given string"
 
+        # Get the character at the specified index and store the result in the destination variable
         character = symb1_value[symb2_value]
         return interpreter.store_result(var, (character, 'string'))
 
@@ -890,29 +959,37 @@ class Setchar(Instruction):
 
     def execute(self, interpreter):
         var, symb1, symb2 = self.args
+        
+        # Check if the destination variable is defined
         error_code, error_message = interpreter.is_variable_defined(var.value)
         if error_code:
             return error_code, error_message
 
+        # Get the value and type of the operand(s)
         error_code, error_message, (var_value, var_none), (var_type, var_none) = interpreter.get_operand_values(var, None)
         if error_code != 0:
             return error_code, error_message
         if var_type != 'string':
             return 53, "Wrong operand <var> type '{var_type}'"
 
+        # Get the value and type of the operand(s)
         error_code, error_message, (symb1_value, symb2_value), (symb1_type, symb2_type) = interpreter.get_operand_values(symb1, symb2)
         if error_code != 0:
             return error_code, error_message
 
+        # Check if the operand types are 'int' and 'string'
         if symb1_type != 'int' or symb2_type != 'string':
             return 53, f"Unsupported operand type(s): '{symb1_type}' or '{symb2_type}'"
 
+        # Check if the string operand has a length of at least 1
         if len(symb2_value) == 0:
             return 58, "Invalid string operation: operand <symb2> is of length 0"
 
+        # Check if the index is within the string indexing
         if symb1_value < 0 or symb1_value >= len(var_value):
             return 58, "Invalid string operation: indexing outside the given string"
 
+        # Replace the character in the destination string and store the result
         modified_string = var_value[:symb1_value] + symb2_value[0] + var_value[symb1_value + 1:]
         return interpreter.store_result(var, (modified_string, 'string'))
 
@@ -923,18 +1000,22 @@ class Type(Instruction):
 
     def execute(self, interpreter):
         var, symb = self.args
+        
+        # Check if the destination variable is defined
         error_code, error_message = interpreter.is_variable_defined(var.value)
         if error_code:
             return error_code, error_message
 
         symb_value, symb_type = None, None
         if symb.arg_type == 'var':
+            # Get the value and type of the operand(s)
             error_code, error_message, (symb_value, symb_none), (symb_type, symb_none) = interpreter.get_operand_values(symb, None)
             if error_code == 56:  # Uninitialized variable
                 symb_type = ''
             elif error_code != 0:
                 return error_code, error_message
         else:
+            # Set the type directly if the operand is not a variable
             symb_type = symb.arg_type
 
         return interpreter.store_result(var, (symb_type, 'string'))
@@ -945,6 +1026,7 @@ class Label(Instruction):
         super().__init__(order, opcode, args)
 
     def execute(self, interpreter):
+        # Labels are already pre-processed by XMLParser
         return 0, ""
 
 
@@ -954,6 +1036,8 @@ class Jump(Instruction):
 
     def execute(self, interpreter):
         label = self.args[0]
+        
+        # Check if label is defined
         if label.value not in interpreter.labels:
             return 52, f"Undefined label {label.value}"
 
@@ -966,23 +1050,26 @@ class Jump(Instruction):
 
         return 0, ""
 
-
 class Jumpif(Instruction):
     def __init__(self, order, opcode, args):
         super().__init__(order, opcode, args)
 
     def execute(self, interpreter):
-        
         label, symb1, symb2 = self.args
+        
+        # Check if label is defined
         if label.value not in interpreter.labels:
             return 52, f"Undefined label {label.value}"
         
+        # Get the value and type of the operand(s)
         error_code, error_message, (symb1_value, symb2_value), (symb1_type, symb2_type) = interpreter.get_operand_values(symb1, symb2)
         if error_code != 0:
             return error_code, error_message
         
+        # Get the current opcode
         opcode = self.opcode.upper()
         
+        # Compare the operands if their types match or if either is 'nil'
         if symb1_type == symb2_type or symb1_type == 'nil' or symb2_type == 'nil':
             jump_instruction = Jump(self.order, "JUMP", [label])  # Create a new Jump instance with the same order and label
             if opcode == 'JUMPIFEQ':
@@ -1006,13 +1093,17 @@ class Exit(Instruction):
 
     def execute(self, interpreter):
         symb = self.args[0]
+        
+        # Get the value and type of the operand(s)
         error_code, error_message, (symb_value, symb_none), (symb_type, symb_none) = interpreter.get_operand_values(symb, None)
         if error_code != 0:
             return error_code, error_message
         
+        # Check if the operand type is 'int'
         if symb_type != 'int':
             return 53, f"Unsupported operand type(s) '{symb_type}'"
         
+        # Check if the exit code is within the valid range (0-49), and exit the program with exit code
         if 0 <= symb_value <= 49:
             sys.exit(symb_value)
         return 57, f"Invalid exit code {symb_value}"
