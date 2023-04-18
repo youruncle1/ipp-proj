@@ -86,17 +86,21 @@ class XMLParser:
             self.root = ET.fromstring(xml_string)
         except ET.ParseError:
             self.root = None
-        
-        # valid opcodes : required number of arguments 
-        self.valid_opcodes = {
+    
+    # valid opcodes : required number of arguments 
+    @property
+    def valid_opcodes(self):
+        return {
             'CREATEFRAME': 0, 'PUSHFRAME': 0, 'POPFRAME': 0, 'RETURN': 0, 'BREAK': 0,
             'DEFVAR': 1, 'POPS': 1, 'CALL': 1, 'LABEL': 1, 'JUMP': 1, 'PUSHS': 1, 'WRITE': 1, 'EXIT': 1, 'DPRINT': 1,
             'MOVE': 2, 'INT2CHAR': 2, 'NOT': 2, 'STRLEN': 2, 'TYPE': 2, 'READ': 2,
             'ADD': 3, 'SUB': 3, 'MUL': 3, 'IDIV': 3, 'LT': 3, 'GT': 3, 'EQ': 3, 'AND': 3, 'OR': 3, 'STRI2INT': 3, 'CONCAT': 3, 'GETCHAR': 3, 'SETCHAR': 3, 'JUMPIFEQ': 3, 'JUMPIFNEQ': 3
         }
-        
-        # regex patterns for validating argument types
-        self.valid_argtypes = {
+
+    # regex patterns for validating argument types
+    @property
+    def valid_argtypes(self):
+        return {
             "var": r"^(LF|TF|GF)@[a-zA-Z_\-$&%*!?][a-zA-Z0-9_\-$&%*!?]*$",
             "type": r"^(bool|int|string)$",
             "label": r"^[a-zA-Z\-_$&%*!?][a-zA-Z0-9\-_$&%*!?]*$",
@@ -105,9 +109,11 @@ class XMLParser:
             "bool": r"^(true|false)$",
             "int": r"^(?:\+|-)?(?:(?!.*_{2})(?!0\d)\d+(?:_\d+)*|0[oO]?[0-7]+(_[0-7]+)*|0[xX][0-9a-fA-F]+(_[0-9a-fA-F]+)*)$"
         }
-        
-        # map opcodes to subclasses of abstract class Instructiom
-        self.opcode_to_class_map = {
+
+    # map opcodes to subclasses of abstract class Instructiom
+    @property
+    def opcode_to_class_map(self):
+        return {
             'MOVE': Move,
             'CREATEFRAME': CreateFrame,
             'PUSHFRAME': PushFrame,
